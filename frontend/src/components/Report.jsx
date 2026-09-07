@@ -146,12 +146,12 @@ function Report({ data, onBack }) {
         {/* ── Vista simple ───────────────────────────── */}
         {vista === 'simple' && (
           <div className="vista-simple">
-            <p style={{ fontSize: '.9rem', color: 'var(--gris-texto)', marginTop: '.9rem' }}>
+            <p className="vista-simple__intro">
               <strong>Resumen de pendientes:</strong> corrige estos puntos para obtener el visto bueno.
             </p>
             <div className="pendientes">
               {fallidos.length === 0 ? (
-                <p style={{ color: 'var(--gris-texto)', fontSize: '.9rem' }}>No hay pendientes.</p>
+                <p className="vista-simple__empty">No hay pendientes.</p>
               ) : (
                 fallidos.map((r) => (
                   <div key={r.rule_id} className="pendiente">
@@ -168,9 +168,7 @@ function Report({ data, onBack }) {
         {vista === 'detallada' && (
           <div>
             {grupos.length === 0 ? (
-              <p style={{ color: 'var(--gris-texto)', fontSize: '.9rem', marginTop: '1rem' }}>
-                No hay resultados con este filtro.
-              </p>
+              <p className="vista-simple__empty">No hay resultados con este filtro.</p>
             ) : (
               grupos.map(([cat, items]) => {
                 const e = items.filter((r) => !r.passed && r.severity === 'error').length
@@ -226,15 +224,13 @@ function Report({ data, onBack }) {
 
       {/* ── Cómo preguntar a una IA ─────────────────── */}
       <div className="card">
-        <h2 style={{ fontSize: '1.1rem' }}>🤖 Cómo preguntar a una IA</h2>
-        <p style={{ fontSize: '.85rem', color: 'var(--gris-texto)', marginTop: '.3rem' }}>
+        <h2 className="ia-titulo">🤖 Cómo preguntar a una IA</h2>
+        <p className="ia-desc">
           Copia y pega estos prompts en cualquier IA (ChatGPT, Claude, etc.) para corregir cada problema.
         </p>
         <div className="ia-cards">
           {prompts.length === 0 ? (
-            <p style={{ color: 'var(--gris-texto)', fontSize: '.9rem' }}>
-              No hay problemas detectados. ¡Felicidades!
-            </p>
+            <p className="ia-empty">No hay problemas detectados. ¡Felicidades!</p>
           ) : (
             prompts.map((p) => (
               <div key={p.rule_id} className="ia-card">
@@ -254,7 +250,7 @@ function Report({ data, onBack }) {
         </div>
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+      <div className="back-action">
         <button className="btn-validar" onClick={onBack}>Validar otro archivo</button>
       </div>
     </main>

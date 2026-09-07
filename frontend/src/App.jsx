@@ -1,8 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Upload from './components/Upload'
 import Report from './components/Report'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+function DarkModeToggle() {
+  const [dark, setDark] = useState(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+  }, [dark])
+  return (
+    <button
+      className="modo-oscuro-btn"
+      onClick={() => setDark((d) => !d)}
+      title={dark ? 'Modo claro' : 'Modo oscuro'}
+      aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+    >
+      {dark ? '☀️' : '🌙'}
+    </button>
+  )
+}
 
 // Datos mock que imitan la respuesta del backend (build_report).
 // Se usan mientras el Integrante 1 no tenga el endpoint listo.
@@ -54,9 +73,12 @@ function App() {
             <div className="sub">FECyC · Universidad Nacional de Trujillo</div>
           </div>
         </div>
-        <button className="volver" onClick={() => setReportData(null)} style={{ display: reportData ? 'inline-block' : 'none' }}>
-          ← Validar otro archivo
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <DarkModeToggle />
+          <button className="volver" onClick={() => setReportData(null)} style={{ display: reportData ? 'inline-block' : 'none' }}>
+            ← Validar otro archivo
+          </button>
+        </div>
       </header>
       {currentView}
       <footer>
