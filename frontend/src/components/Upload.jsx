@@ -26,6 +26,11 @@ function Upload({ onValidated, apiUrl }) {
       setError('El archivo excede el límite de 25 MB.')
       return false
     }
+    // PDF aún no está soportado por el backend (pendiente extractor con PyMuPDF).
+    if (selected.type === 'application/pdf') {
+      setError('El formato PDF aún no está disponible. Por favor, sube un archivo DOCX.')
+      return false
+    }
     return true
   }
 
@@ -75,7 +80,7 @@ function Upload({ onValidated, apiUrl }) {
       // Si la API no está disponible (Integrante 1 aún no la tiene),
       // usamos datos mock del mockup para visualizar el componente de reporte.
       console.warn('API no disponible, usando datos mock:', e.message)
-      const { MOCK_REPORT } = await import('../App')
+      const { MOCK_REPORT } = await import('../mocks')
       onValidated(MOCK_REPORT)
     } finally {
       setLoading(false)

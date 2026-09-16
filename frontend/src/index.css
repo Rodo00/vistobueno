@@ -240,10 +240,9 @@ footer {
 }
 .btn-validar:hover { filter: brightness(1.08); }
 
-/* --- Error --- */
-.aviso { display: none; margin-top: .5rem; padding: .5rem .8rem; border-radius: 6px; font-size: .75rem; }
+/* --- Error (renderizado condicional por React: {error && ...}) --- */
+.aviso { margin-top: .5rem; padding: .5rem .8rem; border-radius: 6px; font-size: .75rem; }
 .aviso.error { background: #fdecea; border: 1px solid var(--rojo); color: var(--rojo); }
-.aviso.visible { display: block; }
 .aviso .ejemplos { display: block; margin-top: .2rem; font-size: .65rem; opacity: .9; }
 
 /* --- Focus states (accesibilidad) --- */
