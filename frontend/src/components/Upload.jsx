@@ -1,34 +1,30 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 
 // Estructura base: pantalla de carga con drag & drop.
 // Replica el mockup mockups/carga.html pero con interactividad real:
-//  - Valida tipo (DOCX/PDF) y tamaño (≤ 25 MB).
+//  - Valida tipo (DOCX) y tamaño (≤ 10 MB, igual que el backend).
 //  - Llama al endpoint POST /validar del backend (Integrante 1).
-//  - Si la API no está disponible, usa datos mock para visualizar el reporte.
+//  - Si la API no está disponible, usa datos mock y LO AVISA al usuario.
 function Upload({ onValidated, apiUrl }) {
   const [file, setFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [dragActivo, setDragActivo] = useState(false)
+  const inputRef = useRef(null)
 
+  const MAX_BYTES = 10 * 1024 * 1024 // 10 MB, igual que el backend
   const acceptedTypes = [
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/pdf'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ]
 
   const validarArchivo = (selected) => {
     if (!selected) return false
-    if (!acceptedTypes.includes(selected.type)) {
-      setError('Formato no soportado. Debes subir un archivo DOCX o PDF.')
+    if (!acceptedTypes.includes(selected.type) && !selected.name?.toLowerCase().endsWith('.docx')) {
+      setError('El archivo no es .docx. Selecciona un documento de Word.')
       return false
     }
-    if (selected.size > 25 * 1024 * 1024) {
-      setError('El archivo excede el límite de 25 MB.')
-      return false
-    }
-    // PDF aún no está soportado por el backend (pendiente extractor con PyMuPDF).
-    if (selected.type === 'application/pdf') {
-      setError('El formato PDF aún no está disponible. Por favor, sube un archivo DOCX.')
+    if (selected.size > MAX_BYTES) {
+      setError(`El archivo pesa ${(selected.size / 1024 / 1024).toFixed(1)} MB. El límite es de 10 MB.`)
       return false
     }
     return true
@@ -53,15 +49,33 @@ function Upload({ onValidated, apiUrl }) {
 
   const onDragOver = useCallback((e) => {
     e.preventDefault()
-    setDragActivo(true)
-  }, [])
+    if (!loading) setDragActivo(true)
+  }, [loading])
 
   const onDragLeave = useCallback(() => {
     setDragActivo(false)
   }, [])
 
+  const openPicker = useCallback(() => {
+    if (!loading) inputRef.current?.click()
+  }, [loading])
+
+  const onDropzoneClick = useCallback((e) => {
+    // Solo abrir el selector si el click no fue en el label/botón (evita doble apertura)
+    if (e.target.closest('label') || e.target.closest('button')) return
+    openPicker()
+  }, [openPicker])
+
+  const quitarArchivo = useCallback(() => {
+    setFile(null)
+    setError(null)
+    if (inputRef.current) inputRef.current.value = ''
+  }, [])
+
+  const cerrarError = useCallback(() => setError(null), [])
+
   const validate = async () => {
-    if (!file) return
+    if (!file || loading) return
     setLoading(true)
     setError(null)
     try {
@@ -77,11 +91,14 @@ function Upload({ onValidated, apiUrl }) {
       const data = await res.json()
       onValidated(data)
     } catch (e) {
-      // Si la API no está disponible (Integrante 1 aún no la tiene),
-      // usamos datos mock del mockup para visualizar el componente de reporte.
+      // API no disponible: datos mock, pero SIEMPRE se avisa al usuario en el reporte
       console.warn('API no disponible, usando datos mock:', e.message)
       const { MOCK_REPORT } = await import('../mocks')
-      onValidated(MOCK_REPORT)
+      onValidated({
+        ...MOCK_REPORT,
+        __mock: true,
+        __mockMotivo: 'No se pudo conectar con el servidor de validación. Este es un reporte de ejemplo; el resultado real podría diferir.',
+      })
     } finally {
       setLoading(false)
     }
@@ -92,30 +109,35 @@ function Upload({ onValidated, apiUrl }) {
       <div className="card">
         <h2>Sube tu tesis</h2>
         <p className="intro">
-          Adjunta tu documento en formato <strong>DOCX</strong> o <strong>PDF</strong> y
+          Adjunta tu documento en formato <strong>DOCX</strong> y
           recibe un reporte automático de cumplimiento con las directivas de formato de la UNT.
         </p>
 
         <div
-          className={`dropzone ${dragActivo ? 'drag' : ''}`}
+          className={`dropzone ${dragActivo ? 'drag' : ''} ${loading ? 'loading' : ''}`}
           onDrop={onDrop}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
+          onClick={onDropzoneClick}
         >
-          <div className="icono">📄</div>
-          <div className="txt-principal">Arrastra tu archivo aquí</div>
+          <div className="icono" aria-hidden="true">📄</div>
+          <div className="txt-principal">{loading ? 'Validando tu documento…' : 'Arrastra tu archivo aquí'}</div>
           <div className="txt-sec">o selecciónalo desde tu computadora</div>
 
           <input
             type="file"
             id="file-input"
-            accept=".docx,.pdf"
+            ref={inputRef}
+            accept=".docx"
+            disabled={loading}
             onChange={(e) => handleFiles(e.target.files)}
           />
-          <label htmlFor="file-input" className="btn-select">Seleccionar archivo</label>
+          <label htmlFor="file-input" className={`btn-select ${loading ? 'disabled' : ''}`}>
+            {loading ? 'Validando…' : 'Seleccionar archivo'}
+          </label>
 
           <div className="nota-formatos">
-            Formatos permitidos: .docx, .pdf · Tamaño máximo: 25 MB
+            Formato permitido: .docx · Tamaño máximo: 10 MB
           </div>
         </div>
 
@@ -129,16 +151,34 @@ function Upload({ onValidated, apiUrl }) {
                   <div className="detalle">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
                 </div>
               </div>
-              <button className="btn-validar" onClick={validate} disabled={loading}>
-                {loading ? 'Validando...' : 'Validar ✦'}
-              </button>
+              <div className="acciones-archivo">
+                <button
+                  className="btn-quitar"
+                  onClick={quitarArchivo}
+                  disabled={loading}
+                  title="Quitar archivo"
+                  aria-label="Quitar archivo seleccionado"
+                >
+                  ✕
+                </button>
+                <button className="btn-validar" onClick={validate} disabled={loading}>
+                  {loading ? (
+                    <><span className="spinner" aria-hidden="true"></span> Validando…</>
+                  ) : (
+                    'Validar ✦'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {error && (
-          <div className="aviso error">
-            <strong>No pudimos procesar tu archivo.</strong>
+          <div className="aviso error" role="alert">
+            <div className="aviso-fila">
+              <strong>Revisa tu archivo.</strong>
+              <button className="aviso-cerrar" onClick={cerrarError} aria-label="Cerrar aviso">✕</button>
+            </div>
             <span className="ejemplos">{error}</span>
           </div>
         )}
