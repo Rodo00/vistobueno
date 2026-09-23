@@ -4,7 +4,8 @@ import { useState, useCallback, useRef } from 'react'
 // Replica el mockup mockups/carga.html pero con interactividad real:
 //  - Valida tipo (DOCX) y tamaño (≤ 10 MB, igual que el backend).
 //  - Llama al endpoint POST /validar del backend (Integrante 1).
-//  - Si la API no está disponible, usa datos mock y LO AVISA al usuario.
+//  - Errores HTTP con detalle JSON → se muestran al usuario (sin mock).
+//  - Sin conexión / proxy sin backend → mock como modo demo (avisado en Report).
 function Upload({ onValidated, apiUrl }) {
   const [file, setFile] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -74,31 +75,69 @@ function Upload({ onValidated, apiUrl }) {
 
   const cerrarError = useCallback(() => setError(null), [])
 
+  // Fallback a reporte mock SOLO cuando no hay respuesta útil del backend
+  // (error de red o proxy sin cuerpo JSON). Modo demo, siempre avisado en Report.
+  const cargarMock = async (motivo) => {
+    const { MOCK_REPORT } = await import('../mocks')
+    onValidated({
+      ...MOCK_REPORT,
+      __mock: true,
+      __mockMotivo: `${motivo} Este es un reporte de ejemplo; el resultado real podría diferir.`,
+    })
+  }
+
   const validate = async () => {
     if (!file || loading) return
     setLoading(true)
     setError(null)
     try {
-      const form = new FormData()
-      form.append('archivo', file)
-      const res = await fetch(`${apiUrl}/validar`, {
-        method: 'POST',
-        body: form,
-      })
-      if (!res.ok) {
-        throw new Error(`Error del servidor: ${res.status}`)
+      let res
+      try {
+        const form = new FormData()
+        form.append('archivo', file)
+        res = await fetch(`${apiUrl}/validar`, {
+          method: 'POST',
+          body: form,
+        })
+      } catch {
+        // Error de red (backend caído, sin proxy, etc.) → mock como modo demo
+        await cargarMock('No se pudo conectar con el servidor de validación.')
+        return
       }
-      const data = await res.json()
-      onValidated(data)
-    } catch (e) {
-      // API no disponible: datos mock, pero SIEMPRE se avisa al usuario en el reporte
-      console.warn('API no disponible, usando datos mock:', e.message)
-      const { MOCK_REPORT } = await import('../mocks')
-      onValidated({
-        ...MOCK_REPORT,
-        __mock: true,
-        __mockMotivo: 'No se pudo conectar con el servidor de validación. Este es un reporte de ejemplo; el resultado real podría diferir.',
-      })
+
+      if (res.ok) {
+        try {
+          const data = await res.json()
+          onValidated(data)
+        } catch {
+          await cargarMock('El servidor devolvió una respuesta inválida.')
+        }
+        return
+      }
+
+      // HTTP != 2xx: si hay cuerpo JSON (detail/message), mostrar el error real y NO mock
+      let detail = null
+      try {
+        const errBody = await res.json()
+        detail = errBody?.detail ?? errBody?.message ?? null
+        if (Array.isArray(detail)) {
+          detail = detail
+            .map((d) => (typeof d === 'string' ? d : d?.msg || JSON.stringify(d)))
+            .join('; ')
+        }
+      } catch {
+        detail = null
+      }
+
+      if (detail) {
+        // Respuesta HTTP con detalle del backend (413/415/422/500, etc.)
+        setError(`El servidor rechazó la validación (HTTP ${res.status}): ${detail}`)
+        return
+      }
+
+      // HTTP sin JSON útil (p.ej. proxy 500 con body vacío cuando el backend está caído)
+      // → fallback a mock como modo demo
+      await cargarMock(`El servidor respondió HTTP ${res.status} sin detalle.`)
     } finally {
       setLoading(false)
     }
@@ -176,7 +215,7 @@ function Upload({ onValidated, apiUrl }) {
         {error && (
           <div className="aviso error" role="alert">
             <div className="aviso-fila">
-              <strong>Revisa tu archivo.</strong>
+              <strong>No se pudo validar.</strong>
               <button className="aviso-cerrar" onClick={cerrarError} aria-label="Cerrar aviso">✕</button>
             </div>
             <span className="ejemplos">{error}</span>
