@@ -1,89 +1,131 @@
-# Semana 4 — Trabajo realizado (F4 del plan DSL)
+# Semana 4 — Trabajo realizado
 
 **Integrante**: IvanSanchezSil
 **Rol**: Integrante 3 — Motor de reglas / Procesamiento
-**Semana**: 4 de 14 (09/09/2026)
+**Semana**: 4 de 14 (14/09/2026 – 18/09/2026)
 **Proyecto**: VistoBueno — Validador automático de formato de tesis (UNT FECyC)
-**Rama de trabajo**: `semana4-f4` (PR desde `fork/semana4-f4` hacia master de retblast)
+**Rama de trabajo**: `semana4` (PR #22 hacia master de retblast)
 
 ---
 
-## Objetivos del día
+## Objetivos de la semana
 
-1. **F4** del plan `docs/PLAN_DSL.md`: mejoras de ingeniería —
-   - **linter del DSL** (`validator/dsl_check.py`): errores de configuración
-     en TIEMPO DE CARGA (no en runtime);
-   - **cache de consultas XPath** por documento;
-   - **traza del autómata** (estados recorridos).
-2. Mantener el contrato intacto y la suite existente verde.
+1. **Documentación de diseño a posteriori** del motor (10 docs + 38 diagramas) y
+   alineación de fechas con la cronología real.
+2. **F5** (pendiente del plan DSL): conexión de la API al DSL + traza de autómatas
+   en el reporte (Opción A).
+3. **Cronología real** del trabajo del integrante (semana 2 = OCR+legacy, semana 3 =
+   motor DSL, semana 4 = docs+F5) y renombrado de los PRs del integrante.
+4. **Tarea 15** del backlog: calidad de ingeniería del motor
+   (ruff, mypy, coverage, pre-commit, CI con Nix).
+5. **Tarea 16** del backlog: exportación del reporte a **Markdown y PDF** (solo CLI;
+   el formato en API queda delegado al compañero de API/frontend).
 
 ---
 
 ## Actividades realizadas
 
-### Tarea 1 (F4): Linter del DSL
+### 15/09/2026 — Docs de diseño, F5 y cronología
 
-**Fecha**: 09/09/2026
+#### Diseño a posteriori (commit `9f65964`)
 
-Nuevo módulo `validator/dsl_check.py` con `linter(rules_data) -> List[str]` y
-`linter_o_alzar()` (levanta `DSLValidationError`). Detecta:
+Se creó el paquete `docs/diseno/00…09` reconstruyendo el diseño del motor que ya
+estaba implementado (F1–F6):
 
-- **regex inválida** en cualquier `patron`/`filtro` (incluye los `patron` de
-  estados/transiciones de autómatas);
-- **`comparacion` sin `esperado`** o sin `atributo` (eq/all_eq/contains) en
-  `atributo_xml`/`presencia_xml`;
-- **estados inalcanzables** y **aceptación inalcanzable** en `automata_pila`;
-- **ciclos épsilon** (transiciones que no consumen y forman un ciclo) — el
-  reconocedor greedy iteraría sin avanzar la entrada;
-- estados **duplicados** o esquema **"todo opcional"** en `automata_secuencia`
-  (sin estado de aceptación).
+| Doc | Contenido |
+|-----|-----------|
+| 00 | Índice (mapa de documentos + diagrama de fases) |
+| 01 | Arquitectura del motor (componentes, secuencia) |
+| 02 | Extracción del DOCX (OPC + tokenizer) |
+| 03 | Autómatas (DFA, PDA, backtracking) — LFA |
+| 04 | Gramática del DSL y BNF — Compiladores |
+| 05 | Compilador + linter |
+| 06 | Migración legacy → DSL + paridad |
+| 07 | Arquitectura de tests (factory + propiedades) |
+| 08 | OCR de reglamentos |
+| 09 | F5: enlace API → DSL (propuesta, luego implementada) |
 
-Se conectó al compilador: `CompilerDSL.compilar(rules_data, linter=True)`
-valida antes de construir los analizadores (se puede desactivar con
-`linter=False`). `reglas_unt.yaml` y `reglas_dsl_ejemplo.yaml` pasan sin
-hallazgos (guard de tests).
+**38 diagramas Mermaid** en total (GitHub los renderiza nativamente).
 
-### Tarea 2 (F4): Cache de XPath en `ExtractedDocx`
+#### F5 implementada (commit `97630c4`) — Opción A
 
-**Fecha**: 09/09/2026
+- `validator/api.py`: `REGLAS_YAML_PATH` → `reglas_unt.yaml` (la API ahora carga
+  el DSL, 41 reglas, incluidas las 9 de F3).
+- `validator/compilador.py`: `_detalle_con_traza()` para la regla `found` en la
+  ruta de estados del autómata (`ruta_estados` / `ultima_ruta`).
+- Docs: `09_f5_enlace_api_propuesta.md` marcado **IMPLEMENTADA**; `NOTA_F5_Y_API_DSL.md`
+  con estado actualizado.
 
-`ExtractedDocx` ganó el método `xpath(parte, expr, contexto)` con cache por
-`(parte, contexto, xpath)` y un campo `_cache`. `Analizador._nodos` delega en
-él: dos secciones de una regla con el mismo XPath evalúan la consulta **una
-sola vez** por documento (aunque una filtre por `contexto == "cuerpo"`).
+#### Cronología real (commit `f539dcc` + `9260870`)
 
-### Tarea 3 (F4): Traza del autómata
+Se creó `docs/cronologia_trabajo.md` mapeando el trabajo real del integrante:
 
-**Fecha**: 09/09/2026
+| Semana | Contenido | PRs |
+|--------|-----------|-----|
+| 2 | OCR + formato legacy YAML | #3 (actual) |
+| 3 | Motor DSL: DFA, analizadores, compilador, F6 paridad | #6, #11 (cerrados #2, #7, #9) |
+| 4 | Docs de diseño + F5 + backlog/tareas 15–16 | #22 (actual) |
 
-- `DFA.ruta_estados` y `PDA.ruta_estados` registran la ruta de estados del
-  último `reconocer()`. En modo `backtracking` el `_dfs` ahora devuelve el
-  camino ganador en lugar de solo un booleano.
-- El DSL lo expone como `AutomataSecuencia.ultima_ruta` y
-  `AutomataPila.ultima_ruta` (materia prima para F5, donde la traza entra al
-  reporte coordinando el contrato con Integrante 1).
+Se **renombraron** los PRs #3, #6, #11 y #22 para reflejar el contenido real y se
+reclasificó la bitácora F4 (`semana4_...` → `semana3_3_...`). Con esto, las
+**fechas** de `README.md`, `CONTRATO_API.md`, `FLUJO_API.md`, `PLAN_DSL.md` y
+`NOTA_F5_Y_API_DSL.md` quedaron alineadas.
 
-### Tarea 4 (F4): Decisión 3 — evaluación paralela NO incluida
+### 15/09/2026 — Plan de trabajo futuro
 
-**Fecha**: 09/09/2026
+- Se consolidó `docs/PLAN_BACKLOG_FUTURO.md` (bloques A–E, 16 ítems de trabajo
+  **nuevo** — el módulo de IA queda fuera hasta que el integrante lo indique).
 
-La paralelización del engine se omitió por decisión propia (decisión 3 del
-plan): agrega complejidad a cambio de velocidad en documentos grandes y se
-documenta como mejora futura opcional. Se actualizó `docs/PLAN_DSL.md`.
+### 16/09/2026 — Tareas 15 y 16 (Fase 1 del backlog)
 
-### Tarea 5 (F4): Tests y verificación
+#### Tarea 15 — Calidad de ingeniería
 
-**Fecha**: 09/09/2026
+Hueco detectado: el repo **no tenía** linters, typechecker, pre-commit ni CI.
 
-`tests/test_f4_ingenieria.py` (21 tests): linter (reglas reales pasan,
-regex inválida, comparaciones incompletas, estados inalcanzables, ciclo
-épsilon, esquema todo-opcional, `DSLValidationError` al compilar, `linter=False`),
-cache (misma consulta → mismo objeto; claves por contexto/xpath; parte
-inexistente → error), y traza (DFA greedy/backtracking, PDA, secuencia y
-pila vía analizadores).
+Herramientas integradas (todo en Nix):
 
-**Resultado**: suite completa **138 tests verdes** (117 + 21) y
-`PARIDAD: OK` en las 6 plantillas reales, dentro de `nix develop`.
+- **ruff** (lint + format, reglas E/F/I/UP/W/B) sobre `validator/`, `scripts/` y `tests/`.
+- **mypy** (moderado) sobre `validator/` y `scripts/`.
+- **coverage** solo reporta (sin umbral bloqueante).
+- **pre-commit** (hooks: ruff, ruff-format, mypy, EOF, whitespace).
+- **CI** `.github/workflows/ci.yml` con `install-nix-action` + `cachix`.
+
+Cambios de configuración:
+
+- `flake.nix`: deps nuevas (`ruff`, `mypy`, `pre-commit`, `pytest-cov`, `coverage`,
+  `markdown`, `weasyprint`); el check `default` corre pytest + ruff + mypy.
+- `pyproject.toml`: `[tool.ruff]`, `[tool.mypy]`, `addopts --cov`.
+- `.gitignore`: `.coverage`, `htmlcov/`, `.mypy_cache/`.
+
+**Refactor inducido** (~30 archivos): se corrigieron **220+ hallazgos de ruff**
+(170+ auto-fixables: `List[str]` → `list[str]`, imports ; 11 manuales) y **9 de
+mypy**. Detalle completo y justificación en
+`docs/diseno/10_calidad_y_exportacion.md`.
+
+#### Tarea 16 — Exportación del reporte a Markdown/PDF
+
+Nuevo módulo `validator/exportador.py`:
+
+- `reporte_a_markdown(reporte) -> str`: semáforo, resumen, tabla, detalle de
+  fallidas y bloque de prompts IA.
+- `reporte_a_pdf(reporte) -> bytes`: Markdown → HTML (`markdown`) → PDF
+  (**WeasyPrint**, elegido por mejor calidad de render).
+- CLI: `python -m validator.cli tesis.docx reglas.yaml --formato {json,markdown,pdf}
+  --salida ruta`; `--json` se conserva como atajo.
+- Utilidad standalone: `python -m validator.exportador reporte.json salida.{md,pdf}`.
+- Tests: `tests/test_exportador.py` (6 tests).
+- **Delegado al compañero de API/frontend**: exponer `formato` en `POST /validar`
+  (afectaría `CONTRATO_API.md` v1.2 — se anotó en el backlog).
+
+---
+
+## Verificaciones
+
+- `pytest tests/` → **148 tests verdes** (142 previos + 6 del exportador).
+- `nix flake check` → **verde** (tests + ruff + mypy).
+- Coverage: **88%** de `validator/`.
+- PDF generado desde plantilla real: 58 KB, firma `%PDF` válida.
+- Markdown generado: semáforo + tabla de 41 reglas.
 
 ---
 
@@ -91,11 +133,14 @@ pila vía analizadores).
 
 | Evidencia | Archivo | Competencia curricular |
 |-----------|---------|------------------------|
-| Linter del DSL | `validator/dsl_check.py` | Ingeniería de Software II (validación en carga) |
-| Cache de XPath | `validator/extractor.py` (`ExtractedDocx.xpath`), `validator/analizadores.py` | Estructura de Datos |
-| Traza del autómata | `validator/automata.py` (`ruta_estados`), `validator/compilador.py` (`ultima_ruta`) | Lenguajes Formales y Autómatas |
-| Tests F4 | `tests/test_f4_ingenieria.py` (21 tests) | Ingeniería de Software II |
-| Documentación (cambios, decisiones) | `docs/CAMBIOS_MOTOR_DSL.md` (Paso 13), `docs/PLAN_DSL.md` (F4 ✅, decisión 3) | Ingeniería de Software I |
+| 10 docs de diseño (38 diagramas) | `docs/diseno/00…10` | LFA · Compiladores · Es. de Software |
+| F5 (API→DSL + traza) | `validator/api.py`, `validator/compilador.py` | Ingeniería de Software I/II |
+| Cronología + PRs renombrados | `docs/cronologia_trabajo.md` | Comunicación oral/escrita |
+| Backlog futuro (16 ítems) | `docs/PLAN_BACKLOG_FUTURO.md` | Ingeniería de Software I (planificación) |
+| Config de calidad | `pyproject.toml`, `flake.nix`, `.pre-commit-config.yaml` | Ingeniería de Software II |
+| CI con Nix | `.github/workflows/ci.yml` | Ingeniería de Software II |
+| Exportador Markdown/PDF | `validator/exportador.py`, `validator/cli.py` | Ingeniería de Software I |
+| Tests de exportador | `tests/test_exportador.py` (6) | Ingeniería de Software II |
 | Bitácora | `docs/semana4_trabajo_ivanSanchezSil.md` | — |
 
 ---
@@ -104,36 +149,37 @@ pila vía analizadores).
 
 | Competencia | Actividad |
 |-------------|-----------|
-| **Lenguajes Formales y Autómatas** | Traza de estados de DFA/PDA; detección estática de ciclos épsilon (riesgo de bucle infinito) |
-| **Estructura de Datos** | Cache por clave `(parte, contexto, xpath)`; BFS de alcanzabilidad para estados inalcanzables |
-| **Ingeniería de Software II** | Validación de configuración en carga (fail-fast), refactor aditivo sin romper contrato, 138 tests verdes |
-| **Ingeniería de Software I** | Documentación técnica (CAMBIOS Paso 13, PLAN_DSL) |
+| **Lenguajes Formales y Autómatas** | Traza de estados de DFA/PDA en el reporte (F5); diagramas de estados en `docs/diseno/03` |
+| **Compiladores** | Gramática BNF del DSL documentada; linter en carga |
+| **Estructura de Datos** | Cache de XPath por `(parte, contexto, xpath)` |
+| **Ingeniería de Software II** | F5; tooling de calidad (ruff/mypy/coverage/pre-commit/CI) |
+| **Ingeniería de Software I** | Documentación técnica (10 docs, cronología, backlog), exportación a Markdown/PDF |
 
 ---
 
 ## Dificultades y aprendizajes
 
-- **El orden del linter vs. el compilador**: como `compilador.py` importa
-  `dsl_check.py` para llamar a `linter_o_alzar`, el linter define sus propias
-  secciones (no importa `SECCIONES_ANALIZADOR` del compilador) para evitar
-  una dependencia circular.
-- **Ciclos épsilon**: revisando el reconocedor greedy del PDA me di cuenta de
-  una autotransición épsilon (`desde == hacia`, `consumir: False`) mantiene
-  `progreso=True` y **no consume entrada** — bucle infinito garantizado. El
-  linter lo detecta estáticamente antes de llegar a runtime.
-- **`comparacion` sin esperado**: es un error silencioso en runtime (la
-  comparación de atributo devuelve `False` con detalle), por eso F4 lo sube a
-  error de carga.
+- **La base nunca se linteó**: 208 errores iniciales de ruff la primera vez que
+  corrió `nix flake check`; la mayoría auto-fixables, 11 requerían decisión
+  (StrEnum, `raise from`, nombres ambiguos).
+- **Mypy y `Any | None`**: lxml devuelve `Any`; para `sorted()`/conjuntos hubo
+  que filtrar con `isinstance` y anotar estructuras como `epsilon_ady`.
+- **`_FABRICAS` abstracta**: el dict de fábricas de analizadores necesitó la
+  anotación `dict[str, Callable[[dict], Analizador]]` porque `Analizador` es una
+  clase abstracta.
+- **WeasyPrint vs. alternativas**: se comparó con reportlab y pymupdf.Story; se
+  eligió WeasyPrint por CSS real (tablas y acentos correctos).
+- **Banner de `nix develop`**: ensucia stdout; por eso las pruebas de CLI usaron
+  `--salida` a archivo en vez de tuberías.
 
 ---
 
 ## Pendiente / Plan semana siguiente
 
-- [x] F4 completa: linter (`dsl_check.py`) + cache XPath + traza del autómata
-- [x] Tests F4 (21) y suite completa **138 verdes** + `PARIDAD: OK`
-- [x] Docs: `CAMBIOS_MOTOR_DSL.md` Paso 13, `PLAN_DSL.md` (F4 ✅, decisión 3),
-      `README.md`, bitácora
-- [x] Commit atómico y push a `fork/semana4-f4` (PR desde `semana4-f4`)
-- [ ] **F5** (última del plan, decisión 1): traza en el reporte —
-      `RuleResult.detalle_traza` **o** embeber en `encontrado`. Coordinar con
-      Integrante 1 el contrato (subiría `CONTRATO_API.md` a v1.1)
+- [x] Docs de diseño (00…09) + F5 + cronología + renombrado de PRs
+- [x] `PLAN_BACKLOG_FUTURO.md` (fase 1: tareas 15 y 16 ejecutadas)
+- [ ] Tarea 13 (benchmark con tesis reales) — requiere tesis anonimizadas
+- [ ] Tarea 14 (rendimiento 150+ páginas) — requiere documentos grandes reales
+- [ ] API: `formato` en `POST /validar` — **delegado al compañero de API/frontend**
+- [ ] Módulo de IA — se tocará solo cuando el integrante lo indique (no es la
+      semana adecuada)

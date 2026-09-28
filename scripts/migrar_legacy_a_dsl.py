@@ -28,12 +28,13 @@ la F1 y alimenta su test de paridad.
 Uso:
     python scripts/migrar_legacy_a_dsl.py [--salida reglas_unt.yaml]
 """
+
 from __future__ import annotations
 
 import argparse
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import yaml
 
@@ -68,14 +69,13 @@ def _normalizar_item(s: str) -> str:
 
 def _slug(s: str) -> str:
     s = s.lower()
-    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"),
-                 ("ú", "u"), ("ñ", "n")):
+    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n")):
         s = s.replace(a, b)
     s = re.sub(r"[^a-z0-9]+", "_", s).strip("_")
     return s or "item"
 
 
-def _estados_secuencia(valor_esperado: List[str]) -> List[Dict[str, Any]]:
+def _estados_secuencia(valor_esperado: list[str]) -> list[dict[str, Any]]:
     """Genera los estados del DFA desde la lista de títulos del manual.
 
     Cada estado preserva el ítem original (`original`) para que el
@@ -83,12 +83,12 @@ def _estados_secuencia(valor_esperado: List[str]) -> List[Dict[str, Any]]:
     La carátula se nombres "caratula" para activar la detección por
     párrafo de portada del DSL.
     """
-    estados: List[Dict[str, Any]] = []
+    estados: list[dict[str, Any]] = []
     for item in valor_esperado:
         nombre = _slug(item)
         if nombre.startswith("caratul"):
             nombre = "caratula"
-        estado: Dict[str, Any] = {
+        estado: dict[str, Any] = {
             "nombre": nombre,
             "patron": _normalizar_item(item),
             "original": item,
@@ -173,7 +173,7 @@ _FABRICANTES = {
 
 def _migrar_rule(rule: dict) -> dict:
     checks = rule["mecanismo_verificable"]["checks"]
-    grupos: Dict[str, List[dict]] = {}
+    grupos: dict[str, list[dict]] = {}
     for check in checks:
         tipo = check["tipo"]
         if tipo == "secuencia_titulos":
@@ -185,7 +185,7 @@ def _migrar_rule(rule: dict) -> dict:
         seccion = CHECK_A_SECCION[tipo]
         grupos.setdefault(seccion, []).append(formulario)
 
-    dsl_rule: Dict[str, Any] = {
+    dsl_rule: dict[str, Any] = {
         "id": rule["id"],
         "tipo": PRIMER_TIPO.get(checks[0]["tipo"], "estructura"),
         "descripcion": rule.get("descripcion", ""),
@@ -215,6 +215,7 @@ def migrar(rules_data: dict) -> dict:
         reglas.append(_migrar_rule(rule))
 
     return {
+        "version": rules_data.get("version", "desconocido"),
         "namespaces": {
             "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
             "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
@@ -245,10 +246,10 @@ def main() -> None:
         "# REGLAS UNT EN FORMATO DSL — GENERADO POR scripts/migrar_legacy_a_dsl.py\n"
         "# ------------------------------------------------------------\n"
         "# Migración de `unt_format_rules_schema.yaml` (formato legacy) al\n"
-        "# formato declarativo (Fase F1 del PLAN_DSL). Este archivo NO es\n"
-        "# el que carga la API (`api.py` sigue apuntando al YAML legacy).\n"
-        "# Se usa para el test de paridad legacy-vs-DSL y como base de\n"
-        "# las fases siguientes (unificación de YAML, F3).\n"
+        "# formato declarativo (Fase F1 del PLAN_DSL). Desde la F5 la API\n"
+        "# (`api.py`) carga ESTE archivo y las reglas F3 mecanizadas a mano.\n"
+        "# Se usa para el test de paridad legacy-vs-DSL y como base de las\n"
+        "# fases siguientes (unificación de YAML, F3).\n"
         "# ============================================================\n\n",
         encoding="utf-8",
     )

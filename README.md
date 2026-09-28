@@ -94,30 +94,60 @@ Ambos reglamentos en PDF escaneado estaban pendientes de OCR (ver README anterio
 
 > **Dos formatos de reglas coexisten (ver [`docs/DSL.md`](docs/DSL.md)):**
 > - `unt_format_rules_schema.yaml` — formato **legacy** (checks con
->   `mecanismo_verificable`). **Es el que carga la API** (`validator/api.py`).
-> - `reglas_unt.yaml` — formato **DSL** (autómatas/analizadores), **41 reglas**:
+>   `mecanismo_verificable`). Es la fuente histórica (Semana 2); la API ya no lo
+>   carga.
+> - `reglas_unt.yaml` — formato **DSL** (autómatas/analizadores), **47 reglas**:
 >   las 32 legacy migradas (F1) + 9 reglas antes no-deterministas mecanizadas
->   a mano en la F3 (tokenizer + analizadores de conteo/lista/hipervínculo).
->   **La API todavía NO lo carga**: cambiarla es una fase coordinada. Para las
->   32 reglas compartidas, ambos motores dan resultados idénticos (paridad
->   verificada con `scripts/evaluar_paridad_plantillas.py` contra `recursos/`).
+>   a mano en la F3 (tokenizer + analizadores de conteo/lista/hipervínculo)
+>   + `indice_paginas_separadas` (paginación real por `w:lastRenderedPageBreak`)
+>   + encabezados/pies, notas al pie (F2 ítems 1-3) + `indice_apunta_secciones`
+>   e `indice_numeracion_jerarquica` (F2 ítems 11-12, índice de contenidos).
+>   **Es el que carga la API** (`validator/api.py`, desde la **F5**, Semana 4).
+>   Para las 32 reglas compartidas, ambos motores dan resultados idénticos
+>   (paridad verificada con `scripts/evaluar_paridad_plantillas.py` contra
+>   `recursos/`).
 
 ```
 validator/
-  __init__.py
-  models.py     — RuleResult, Severity (error|warning)
-  extractor.py  — abre el .docx (zip OPC), expone document.xml/footer1.xml/header1.xml
-                  y el contexto "cuerpo" (párrafos de la última sección)
-  checks.py     — ejecuta cada tipo de check (xml_atributo, xml_presencia,
-                  texto_regex, texto_en_lista, secuencia_titulos, imagen_presencia)
-  engine.py     — carga el YAML, corre las reglas mecanizadas, arma el reporte
-  prompts.py    — genera el bloque "cómo preguntar a una IA" por cada regla
-                  fallida (template-based, sin LLM en runtime)
-  cli.py        — CLI de referencia para correr el validador contra un DOCX
+  __init__.py         # Docstring del paquete
+  models.py           # RuleResult (dataclass), Severity (Enum)
+  extractor.py        # Abre .docx, extrae XML (ExtractedDocx)
+  checks.py           # Checks individuales (xpath, atributos, regex)
+  engine.py           # Carga YAML, corre reglas, arma reporte
+  prompts.py          # Generador de prompts "cómo preguntar a una IA"
+  cli.py              # CLI de referencia
+  exportador.py       # Exporta el reporte a Markdown y PDF
+  api.py              # FastAPI endpoint POST /validar
+  api_models.py       # Pydantic DTOs (ValidarResponse, etc.)
+  tokenizer.py        # Análisis léxico DSL (TITULO, PARRAFO, etc.)
+  analizadores.py     # Analizadores de hoja (XML, regex, lista, imagen)
+  automata.py         # DFA, GramaticaEstructura, PDA
+  compilador.py       # CompilerDSL: YAML → analizadores → RuleResult
+  dsl_check.py        # Linter del DSL (valida config al cargar)
+
+tests/
+  test_api_contract.py      # Tests de contrato para la API
+  test_dsl.py               # Tests del DSL (DFA, gramática, compilador)
+  test_f2_automatas.py      # Tests F2: tokenizer, PDA, automata_pila
+  test_f3_mecanizacion.py   # Tests F3: reglas no deterministas
+  test_f4_ingenieria.py     # Tests F4: linter, cache, traza
+  test_paridad_formatos.py  # Paridad legacy vs DSL
+  test_propiedad.py         # Tests de propiedad (factory + mutaciones)
+  test_exportador.py        # Tests de exportación a Markdown/PDF
+  docx_factory.py           # Factory determinista de DOCX
+  _docx_builder.py          # Builder interno de DOCX
+  _mutations.py             # Mutaciones sincronizadas con reglas_unt.yaml
+  _xml_constants.py         # Constantes XML para el builder
 
 scripts/
-  eval_contra_plantillas.py  — corre el motor contra un directorio de .docx
-                                (reemplaza el batch-eval de eval_checks2.py)
+  eval_contra_plantillas.py       # Evaluación batch contra plantillas
+  generate_openapi.py             # Genera la especificación OpenAPI (docs/openapi_spec.json)
+  evaluar_paridad_plantillas.py   # Paridad legacy vs DSL (recursos/)
+  migrar_legacy_a_dsl.py          # Migra YAML legacy → DSL
+  ocr_pdfs.py                     # OCR de reglamentos escaneados
+
+reglas_unt.yaml            # Reglas en formato DSL (47 reglas)
+reglas_dsl_ejemplo.yaml    # Ejemplo de reglas DSL
 ```
 
 **Filtro de severidad**: `engine.build_report(resultados, severities=["error"])` filtra el reporte detallado por severidad, pero el semáforo SIEMPRE se calcula sobre todos los `error` sin filtrar — un filtro de visualización nunca puede ocultar un bloqueo real de la entrega.
@@ -125,9 +155,22 @@ scripts/
 ### Cómo correrlo
 
 ```bash
-nix develop   # entorno con python, pyyaml, lxml, etc.
+nix develop   # entorno con todas las dependencias
 
-# validar un DOCX
+# tests (vía nix run — recomendado)
+nix run .#test -- tests/ -v
+
+# tests (directo, requiere nix develop activo)
+pytest tests/ -v
+
+# API en desarrollo
+nix run .#serve -- validator.api:app --reload
+# Swagger UI: http://localhost:8000/docs
+
+# API (directo)
+uvicorn validator.api:app --reload
+
+# validar un DOCX desde CLI
 python -m validator.cli tesis.docx unt_format_rules_schema.yaml
 
 # solo errores bloqueantes
@@ -136,18 +179,35 @@ python -m validator.cli tesis.docx unt_format_rules_schema.yaml --severity error
 # reporte completo en JSON (incluye "como_preguntar_a_una_ia")
 python -m validator.cli tesis.docx unt_format_rules_schema.yaml --json
 
+# exportar el reporte a Markdown o PDF (para la bitácora/entrega)
+python -m validator.cli tesis.docx reglas_unt.yaml --formato markdown --salida reporte.md
+python -m validator.cli tesis.docx reglas_unt.yaml --formato pdf --salida reporte.pdf
+
+# exportar un reporte JSON preexistente
+python -m validator.exportador reporte.json reporte.md
+python -m validator.exportador reporte.json reporte.pdf
+
 # evaluar un lote de plantillas/tesis de prueba
 python scripts/eval_contra_plantillas.py unt_format_rules_schema.yaml ruta/a/plantillas/
 
-# suite completa de tests (incluye contrato API y paridad)
-pytest tests/ -v
+# regenerar la especificación OpenAPI (docs/openapi_spec.json)
+python scripts/generate_openapi.py
+
+# calidad de ingeniería (lint, tipos y medición de cobertura)
+ruff check validator/ scripts/ tests/
+ruff format --check validator/ scripts/ tests/
+mypy validator/ scripts/
+pytest tests/ --cov=validator --cov-report=term-missing
+
+# verificación completa (tests + lint del flake + tipos + cobertura)
+nix flake check
 ```
 
-La suite (**140 tests**) incluye los **tests de propiedad** (F6): un factory
+La suite (**213 tests**) incluye los **tests de propiedad** (F6): un factory
 determinista de DOCX (`tests/docx_factory.py`, descompuesto en
 `tests/_xml_constants.py`, `tests/_docx_builder.py` y `tests/_mutations.py`;
 este último **sincroniza sus mutaciones con `reglas_unt.yaml` al importar`)
-genera un documento "bueno" (39/41) y 41 mutaciones de una sola propiedad
+genera un documento "bueno" (45/47) y 47 mutaciones de una sola propiedad
 (`tests/test_propiedad.py`), verificando que un desvío mínimo invalida solo
 su regla. Sobre eso, las **mejoras de ingeniería F4** agregaron: un **linter
 del DSL** (`validator/dsl_check.py`) que valida la configuración al cargar
@@ -163,7 +223,20 @@ ciclos épsilon), **cache de consultas XPath** por documento y la
 - **Parsing PDF**: `PyMuPDF` (fitz).
 - **Config de reglas**: YAML (`pyyaml`).
 - **Hosting**: on-premise en infraestructura de la universidad. Sin dependencias de servicios externos en tiempo de ejecución (sin llamadas a APIs de LLM en producción, bajo la restricción actual).
-- **Entorno de desarrollo**: Nix flake (`flake.nix`) — Python 3.14 + dependencias del motor + toolchain de OCR (`ocrmypdf`, `tesseract` con español, `poppler_utils`) para procesar los reglamentos escaneados pendientes.
+- **Frontend tooling**: Vite + React (`frontend/`).
+- **Entorno de desarrollo**: Nix flake (`flake.nix`) — Python 3.14 + dependencias del motor + toolchain de OCR (`ocrmypdf`, `tesseract` con español, `poppler_utils`) + tooling de calidad (ruff, mypy, pre-commit) y de exportación (markdown, WeasyPrint). Incluye `nix run .#test` (pytest), `nix run .#serve` (uvicorn) y `nix flake check` para verificación completa (tests + ruff + mypy + cobertura).
+
+### Despliegue del frontend (`VITE_API_URL` y proxy)
+
+El frontend llama a `POST /validar` con `API_BASE_URL = import.meta.env.VITE_API_URL || ''` (`frontend/src/App.jsx`).
+
+| Entorno | Cómo llega al backend |
+|---------|----------------------|
+| **`npm run dev`** (desarrollo) | Proxy de Vite en `vite.config.js` enruta `/validar` → `http://localhost:8000`. El default `VITE_API_URL=''` (mismo origen) funciona sin configurar nada. |
+| **`npm run preview` / build estático** | **No existe el proxy de Vite.** Hay que: (1) definir `VITE_API_URL` en tiempo de build hacia el origen de la API, o (2) servir el build detrás de un **reverse proxy** (nginx, Caddy, etc.) que enroute `/validar` al backend FastAPI. |
+| **Build con API en otro origen** | `VITE_API_URL=https://api.tudominio.com npm run build` (o variable en CI). Ver `frontend/.env.example`. |
+
+Mientras `VITE_API_URL` quede vacío en un despliegue **sin** proxy/reverse proxy, las llamadas a `/validar` fallarán con error de red y el UI entrará en modo demo (reporte mock avisado). Errores HTTP del backend **con** cuerpo JSON (`detail`) se muestran al usuario y **no** se sustituyen por mocks.
 
 ## Extensiones futuras (fuera de alcance por ahora)
 
@@ -172,4 +245,6 @@ ciclos épsilon), **cache de consultas XPath** por documento y la
 
 ## Estado actual
 
-Motor de reglas de producción implementado y probado end-to-end (extractor + checks + engine + filtro de severidad + generador de prompts), validado contra un DOCX de prueba y contra las 5 plantillas oficiales (25/32 mecanizadas PASS). Los dos RCU escaneados fueron leídos vía OCR (2026-09-02) y quedaron reflejados en el YAML: la lista de líneas de investigación del RCU-220 alimenta la regla `caratula_linea_investigacion` y el aporte del RCU-274 (Anexo 5) se registró como no determinista. Aún no hay API (FastAPI) ni frontend React conectados. Próximos pasos: exponer el motor vía `POST /validar` en FastAPI y conectar el frontend en React.
+Motor de reglas de producción implementado y probado end-to-end (extractor + checks + engine + filtro de severidad + generador de prompts), validado contra un DOCX de prueba y contra las 5 plantillas oficiales (25/32 mecanizadas PASS). Los dos RCU escaneados fueron leídos vía OCR (2026-09-02) y quedaron reflejados en el YAML: la lista de líneas de investigación del RCU-220 alimenta la regla `caratula_linea_investigacion` y el aporte del RCU-274 (Anexo 5) se registró como no determinista.
+
+**API FastAPI** implementada (`POST /validar`) con validación de entrada, manejo de errores, DTOs Pydantic y suite de tests de contrato (ver `docs/CONTRATO_API.md`). **Frontend React** inicializado con Vite (`frontend/`), con mockups de las pantallas de carga y reporte (`mockups/`). **Motor DSL** consolidado (F1–F6): 47 reglas mecanizadas (incluye paginación real `indice_paginas_separadas`, ubicación por página, encabezados/pies, notas al pie, e índice de contenidos con `indice_apunta_secciones`/`indice_numeracion_jerarquica`), linter, cache XPath, traza de autómata y tests de propiedad con factory determinista de DOCX. **Calidad de ingeniería** (ruff, mypy, coverage, pre-commit, CI con Nix) y **exportación del reporte a Markdown/PDF** implementadas (tareas 15 y 16 del `docs/PLAN_BACKLOG_FUTURO.md`).

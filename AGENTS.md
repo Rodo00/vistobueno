@@ -34,10 +34,13 @@ Frontend (React)
 | **Extractor DOCX** | `validator/extractor.py` | Abre .docx (zip OPC), extrae XML |
 | **Checks** | `validator/checks.py` | Ejecuta checks individuales (xpath, atributos, regex) |
 | **Prompts IA** | `validator/prompts.py` | Genera prompts template para reglas fallidas |
+| **Exportador Markdown/PDF** | `validator/exportador.py` | Exporta reportes a Markdown y PDF |
 | **API** | `validator/api.py` | Endpoint FastAPI `POST /validar` |
 | **DTOs API** | `validator/api_models.py` | Modelos Pydantic de respuesta (campos en español) |
 | **CLI referencia** | `validator/cli.py` | Validador desde línea de comandos |
-| **Reglas** | `unt_format_rules_schema.yaml` | 44 reglas, 32 ejecutables |
+| **Tests exportador** | `tests/test_exportador.py` | Tests de exportación Markdown/PDF |
+| **Reglas** | `unt_format_rules_schema.yaml` | 44 reglas, 32 ejecutables (fuente de verdad legacy) |
+| **Reglas DSL (producción)** | `reglas_unt.yaml` | 47 reglas verificables (F1–F6 + F2 ítems 1-3 y 11-12) |
 
 ---
 
@@ -199,6 +202,16 @@ El semáforo **siempre** se calcula sobre TODOS los errores, independiente del f
 nix develop   # activa el entorno con todas las dependencias
 ```
 
+Al entrar, el shellHook muestra los comandos disponibles. Herramientas principales:
+
+| Comando | Qué hace |
+|---------|----------|
+| `nix run .#test -- tests/ -v` | Ejecuta la suite de tests |
+| `nix run .#serve -- validator.api:app --reload` | Inicia la API en desarrollo |
+| `nix flake check` | Verificación completa (tests + lint del flake) |
+| `pytest tests/ -v` | Tests directos (requiere `nix develop` activo) |
+| `uvicorn validator.api:app --reload` | API directa (requiere `nix develop` activo) |
+
 Dependencias: Python 3.14, FastAPI, uvicorn, Pydantic, pyyaml, python-docx, PyMuPDF, lxml, pytest, httpx, python-multipart, ocrmypdf, tesseract (spa+eng).
 
 ### Gestión de dependencias
@@ -213,7 +226,7 @@ Dependencias: Python 3.14, FastAPI, uvicorn, Pydantic, pyyaml, python-docx, PyMu
 
 ### Pitfalls conocidos
 
-- El atributo de nixpkgs para las utilidades de Poppler es `pkgs.poppler_utils` (con guion bajo), NO `poppler-utils`. En Nix los atributos de paquetes usan `_`, no `-`. Si usas `pkgs.poppler-utils`, `nix develop` falla por atributo inexistente.
+- El atributo canónico de nixpkgs para las utilidades de Poppler es `pkgs.poppler_utils` (con guion bajo). En nixpkgs actual también existe `poppler-utils` (alias), pero `poppler_utils` es el nombre estable.
 - FastAPI necesita `python-multipart` para manejar `multipart/form-data`. Sin él, el endpoint de upload no funciona.
 - El engine carga el YAML de reglas una sola vez al iniciar. Si modificas `unt_format_rules_schema.yaml`, reinicia el servidor.
 
@@ -260,9 +273,14 @@ menos de 50 caracteres, la rasteriza y aplica Tesseract (spa+eng). Si
 
 ## Reglas de validación
 
-- **44 reglas** definidas en `unt_format_rules_schema.yaml`.
-- **32 con mecanismo verificable** (ejecutables sobre XML del DOCX).
-- **12 sin mecanismo** (requieren análisis semántico, fuera del MVP).
+- **Reglas legacy** en `unt_format_rules_schema.yaml`: 44 definidas; **32 con
+  mecanismo verificable** (ejecutables sobre XML del DOCX); **12 sin mecanismo**
+  (requieren análisis semántico, fuera del MVP). Fuente de referencia histórica.
+- **Reglas de producción (DSL)** en `reglas_unt.yaml`: **47 reglas verificables**,
+  que incluyen las 32 migradas, las 9 mecanizadas a mano (F3) y los ítems de la
+  Semana 5: `indice_paginas_separadas` (paginación real), `encabezado_membrete` y
+  `encabezado_formato` (encabezados/pies), `notas_al_pie_consistencia`, e
+  `indice_apunta_secciones` / `indice_numeracion_jerarquica` (índice de contenidos).
 - Las reglas cubren: papel, fuente, tamaños, interlineado, alineación, márgenes, numeración, sangría, estructura de secciones.
 
 ### Severidad
@@ -271,6 +289,8 @@ menos de 50 caracteres, la rasteriza y aplica Tesseract (spa+eng). Si
 - `warning`: no bloquea, pero se muestra en el reporte.
 
 3 reglas bajadas de `error` a `warning` por desvío documentado entre manual y plantillas oficiales.
+> Los conteos declarados aquí (47 reglas, doc bueno 45/47, suite 213 tests) se
+> mantienen sincronizados con `tests/_mutations.py` y `docs/diseno/00_indice_diseno.md`.
 
 ### Cómo agregar una regla nueva al YAML
 
@@ -279,9 +299,16 @@ Si necesitas agregar una regla de formato que no existe todavía:
 1. Leer el manual oficial (`recursos/MANUAL REVISADO TERCERA VERSION OBSERVACIONES 11-07-2025.docx`) y encontrar la sección correspondiente.
 2. Definir el `id` en inglés (snake_case), ej. `margen_superior`.
 3. Especificar `tipo`, `descripcion`, `valor_esperado`, `severidad`, `fuente`, `ubicacion`, `cita`.
-4. Si es verificable mecánicamente, agregar `mecanismo_verificable` con sus `checks`.
-5. Cada check necesita: `tipo` (xml_atributo, xml_presencia, texto_regex, texto_en_lista, secuencia_titulos, imagen_presencia), `xpath`, `comparacion`, `esperado`.
-6. Probar con `python -m validator.cli prueba.docx unt_format_rules_schema.yaml` antes de hacer commit.
+4. Agregarla a **`reglas_unt.yaml`** (formato DSL): cada regla declara una o más
+   secciones de analizador (`atributo_xml`, `presencia_xml`, `patron_texto`,
+   `lista_texto`, `imagen`, `automata_secuencia`, `gramatica_estructura`,
+   `automata_pila`, `patron_cantidad`, `conteo_nodos`, `lista_obligatoria`,
+   `hipervinculo_texto`, `paginacion`, `nota_pie`). Si se usa una sección nueva:
+   registrar el analizador en `SECCIONES_ANALIZADOR` y `_FABRICAS`
+   (`validator/compilador.py`) y en `_SECCIONES` (`validator/dsl_check.py`).
+5. **Sincronizar `tests/_mutations.py`**: la regla debe tener una mutación (y el
+   `REGLAS_ACOPLADAS` si rompe más de una), o `test_propiedad` falla en la recolecta.
+6. Probar con `python -m validator.cli prueba.docx reglas_unt.yaml` antes de hacer commit.
 7. Documentar en el YAML si hay desvío entre el manual y las plantillas oficiales (usar nota con prefijo `EVALUADO:`).
 
 ---
@@ -304,7 +331,7 @@ Cada integrante tiene su área para evitar conflictos de merge:
 |------------|-----------------|-----------------------------------|
 | Integrante 1 (Backend) | `api.py`, `api_models.py`, `tests/`, `docs/CONTRATO_API.md` | `extractor.py`, `checks.py` (coordina con Int3) |
 | Integrante 2 (Frontend) | `frontend/` (React), `docs/` | `validator/` (coordina con Int1) |
-| Integrante 3 (Motor) | `engine.py`, `models.py`, `extractor.py`, `checks.py`, `prompts.py`, YAML de reglas | `api.py`, `api_models.py` (coordina con Int1) |
+| Integrante 3 (Motor) | `engine.py`, `models.py`, `extractor.py`, `checks.py`, `prompts.py`, `tokenizer.py`, `analizadores.py`, `automata.py`, `compilador.py`, `dsl_check.py`, YAML de reglas | `api.py`, `api_models.py` (coordina con Int1) |
 
 Si necesitas modificar un archivo que no es de tu área, **coordina primero** con el integrante responsable.
 
@@ -330,7 +357,9 @@ vistobueno/
 ├── AGENTS.md                          # Esta guía
 ├── README.md                          # Documentación general del proyecto
 ├── flake.nix                          # Entorno de desarrollo Nix
-├── unt_format_rules_schema.yaml       # 44 reglas de formato (fuente de verdad)
+├── unt_format_rules_schema.yaml       # 44 reglas de formato (fuente de verdad legacy)
+├── reglas_unt.yaml                    # Reglas en formato DSL (47 reglas)
+├── reglas_dsl_ejemplo.yaml            # Ejemplo de reglas DSL
 ├── validator/
 │   ├── __init__.py                    # Docstring del paquete
 │   ├── engine.py                      # Motor: load_rules, validate_docx, build_report
@@ -338,17 +367,54 @@ vistobueno/
 │   ├── extractor.py                   # Abre .docx, extrae XML (ExtractedDocx)
 │   ├── checks.py                      # Checks individuales (xpath, atributos, regex)
 │   ├── prompts.py                     # Generador de prompts "cómo preguntar a una IA"
+│   ├── exportador.py                  # Exporta reportes a Markdown y PDF
 │   ├── api.py                         # FastAPI endpoint POST /validar
 │   ├── api_models.py                  # Pydantic DTOs (ValidarResponse, etc.)
-│   └── cli.py                         # CLI de referencia
+│   ├── cli.py                         # CLI de referencia
+│   ├── tokenizer.py                   # Análisis léxico DSL
+│   ├── analizadores.py                # Analizadores de hoja (XML, regex, lista, imagen)
+│   ├── automata.py                    # DFA, GramaticaEstructura, PDA
+│   ├── compilador.py                  # CompilerDSL: YAML → analizadores → RuleResult
+│   └── dsl_check.py                   # Linter del DSL
 ├── tests/
-│   └── test_api_contract.py           # Tests de contrato para la API
+│   ├── test_api_contract.py           # Tests de contrato para la API
+│   ├── test_dsl.py                    # Tests del DSL (DFA, gramática, compilador)
+│   ├── test_f2_automatas.py           # Tests F2: tokenizer, PDA, automata_pila
+│   ├── test_f3_mecanizacion.py        # Tests F3: reglas no deterministas
+│   ├── test_f4_ingenieria.py          # Tests F4: linter, cache, traza
+│   ├── test_paridad_formatos.py       # Paridad legacy vs DSL
+│   ├── test_propiedad.py              # Tests de propiedad (factory + mutaciones)
+│   ├── test_exportador.py             # Tests de exportación a Markdown/PDF
+│   ├── docx_factory.py                # Factory determinista de DOCX
+│   ├── _docx_builder.py               # Builder interno de DOCX
+│   ├── _mutations.py                  # Mutaciones sincronizadas con reglas_unt.yaml
+│   └── _xml_constants.py              # Constantes XML para el builder
 ├── docs/
 │   ├── CONTRATO_API.md                # Especificación del endpoint
+│   ├── openapi_spec.json              # Especificación OpenAPI
+│   ├── DSL.md                         # Referencia del DSL declarativo
+│   ├── PLAN_DSL.md                    # Plan de fases DSL (F1-F6)
+│   ├── PLAN_BACKLOG_FUTURO.md         # Backlog de tareas futuras
+│   ├── CAMBIOS_MOTOR_DSL.md           # Historial de cambios del motor DSL
+│   ├── FLUJO_API.md                   # Flujo de la API en detalle
+│   ├── cronologia_trabajo.md          # Cronología del trabajo
 │   ├── ejemplo_respuesta_motor.json   # Salida de referencia del motor
 │   └── semana{N}_trabajo_{user}.md    # Bitácoras semanales
+├── diseno/
+│   └── *.md                           # Documentación de diseño (ver índice)
 ├── scripts/
-│   └── eval_contra_plantillas.py      # Evaluación batch contra plantillas
+│   ├── eval_contra_plantillas.py      # Evaluación batch contra plantillas
+│   ├── evaluar_paridad_plantillas.py  # Paridad legacy vs DSL (recursos/)
+│   ├── migrar_legacy_a_dsl.py         # Migra YAML legacy → DSL
+│   ├── ocr_pdfs.py                    # OCR de reglamentos escaneados
+│   └── generate_openapi.py            # Regenerar especificación OpenAPI
+├── frontend/                          # React + Vite (en desarrollo)
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── components/
+│   │   └── mocks.js
+│   └── public/
+├── mockups/                           # Prototipos HTML estáticos
 └── recursos/                          # Plantillas oficiales y reglamentos (.docx, .pdf)
 ```
 
@@ -406,6 +472,27 @@ El `AGENTS.md` se puede actualizar conforme el proyecto evolucione:
 - Nuevos roles o responsabilidades → actualizar tabla de roles
 
 **Restricción**: todo cambio al `AGENTS.md` debe ser **aprobado por el usuario** antes de hacerse commit. No actualices este documento unilateralmente.
+
+### Mantenimiento de README.md
+
+El `README.md` es el punto de entrada público del proyecto y debe mantenerse sincronizado con el estado real del código. Cada commit que modifique:
+
+- la arquitectura o el flujo de datos;
+- los comandos de desarrollo, tests o despliegue;
+- el contrato de la API;
+- el conjunto de reglas o el comportamiento del validador;
+- los componentes públicos del frontend o del backend;
+
+debe ir acompañado de una actualización de `README.md` que refleje el cambio. Si el README ya cubre el cambio sin necesidad de edición, no se requiere actualización.
+
+Al revisar un PR, verificar que:
+
+1. las rutas y nombres de archivos mencionados existan;
+2. los comandos de ejemplo aún sean válidos;
+3. las secciones de arquitectura, stack y estado actual estén actualizadas;
+4. cualquier cambio en `AGENTS.md` que afecte a la documentación pública haya sido reflejado en `README.md`.
+
+**Prioridad**: si hay conflicto entre README y AGENTS, mantener AGENTS como guía de trabajo y README como resumen público, pero ambos deben contar la misma historia.
 
 ---
 
