@@ -42,17 +42,28 @@ CAMPOS_RESULTADO = {
     "ubicacion",
     "fuente",
     "cita",
+    "aplicable",
 }
 
 # Campos del objeto 'resumen'
-CAMPOS_RESUMEN = {"total", "fallidos_error", "fallidos_warning"}
+CAMPOS_RESUMEN = {
+    "total",
+    "total_evaluadas",
+    "reglas_no_aplicables",
+    "fallidos_error",
+    "fallidos_warning",
+}
 
 # Campos del objeto 'metadatos'
 CAMPOS_METADATOS = {
     "archivo_nombre",
     "archivo_tamano_bytes",
     "reglas_evaluadas",
+    "reglas_totales",
     "version_esquema",
+    "tipo_documento_declarado",
+    "tipo_documento_inferido",
+    "tipo_documento_estado",
 }
 
 
