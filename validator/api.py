@@ -100,9 +100,7 @@ def _extraer_metadata_tipo_documento(
     El parseo es determinista sobre el texto que genera el motor mismo, por
     lo que no hay riesgo de desalineación.
     """
-    detector = next(
-        (r for r in resultados_motor if r.rule_id == "deteccion_tipo_documento"), None
-    )
+    detector = next((r for r in resultados_motor if r.rule_id == "deteccion_tipo_documento"), None)
     if detector is None or not detector.found:
         return {
             "tipo_documento_declarado": None,

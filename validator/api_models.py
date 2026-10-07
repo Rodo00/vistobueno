@@ -83,7 +83,7 @@ class ResultadoReglaAPI(BaseModel):
                     "esperado": "secciones obligatorias del esquema cualitativo",
                     "encontrado": "no aplica a este documento",
                     "aplicable": False,
-                    "ubicacion": 'Capítulo II — esquemas formales por tipo de título (párr. 75-90)',
+                    "ubicacion": "Capítulo II — esquemas formales por tipo de título (párr. 75-90)",
                     "fuente": "MANUAL REVISADO TERCERA VERSION OBSERVACIONES 11-07-2025.docx",
                     "cita": '"Cada título profesional exige un esquema formal distinto"',
                 },
@@ -107,9 +107,7 @@ class ResumenValidacion(BaseModel):
     """Resumen cuantitativo de la validación."""
 
     total: int = Field(..., description="Total de reglas presentes en el YAML")
-    total_evaluadas: int = Field(
-        ..., description="Reglas realmente evaluadas sobre el documento"
-    )
+    total_evaluadas: int = Field(..., description="Reglas realmente evaluadas sobre el documento")
     reglas_no_aplicables: int = Field(
         ..., description="Reglas omitidas porque no aplican a este tipo de documento"
     )

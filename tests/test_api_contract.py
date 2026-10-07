@@ -431,7 +431,10 @@ class TestParidadAPICLI:
         # Mismos counts (los dos nuevos campos)
         assert datos_api["resumen"]["total"] == reporte["resumen"]["total"]
         assert datos_api["resumen"]["total_evaluadas"] == reporte["resumen"]["total_evaluadas"]
-        assert datos_api["resumen"]["reglas_no_aplicables"] == reporte["resumen"]["reglas_no_aplicables"]
+        assert (
+            datos_api["resumen"]["reglas_no_aplicables"]
+            == reporte["resumen"]["reglas_no_aplicables"]
+        )
         assert datos_api["resumen"]["fallidos_error"] == reporte["resumen"]["fallidos_error"]
         assert datos_api["resumen"]["fallidos_warning"] == reporte["resumen"]["fallidos_warning"]
 
@@ -450,10 +453,14 @@ class TestParidadAPICLI:
 
         # Los nuevos campos de resultado
         for r_motor, r_api in zip(resultados_motor, datos_api["resultados"], strict=True):
-            assert r_motor.aplicable == r_api["aplicable"], f"Discrepancia de aplicable en {r_motor.rule_id}"
+            assert r_motor.aplicable == r_api["aplicable"], (
+                f"Discrepancia de aplicable en {r_motor.rule_id}"
+            )
 
         # Metadatos de tipo de documento (opcionales)
         metadatos_api = datos_api["metadatos"]
         assert metadatos_api["tipo_documento_declarado"] is None  # plantilla no declara
-        assert metadatos_api["tipo_documento_inferido"] == "tinv_cuantitativo"  # infiere cuantitativo
+        assert (
+            metadatos_api["tipo_documento_inferido"] == "tinv_cuantitativo"
+        )  # infiere cuantitativo
         assert metadatos_api["tipo_documento_estado"] == "vigente"
