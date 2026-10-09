@@ -211,8 +211,8 @@ El revisor probó el PR por su cuenta (CI 2/2 verde, lint/build/pytest locales, 
 
 ## Evidencias
 
-- Commits: `e27e683` (mejoras IHC), `7bd0be4` (Arreglos.txt v1), `5c169ef` (v2), `6c512ec` (v3), `df05bd6` (auditoría UX C17–C29), `d306f36` + `4c9cc55` (Fase A revisión, C30–C38), `21d0ac3` (script E2E versionado, C39), `abac6b6` (lint en CI, C40, rama `ci-frontend-lint`).
-- PRs: https://github.com/retblast/vistobueno/pull/41 · https://github.com/retblast/vistobueno/pull/42 · https://github.com/retblast/vistobueno/pull/31 · https://github.com/Rodo00/vistobueno/pull/10
+- Commits: `e27e683` (mejoras IHC), `7bd0be4` (Arreglos.txt v1), `5c169ef` (v2), `6c512ec` (v3), `df05bd6` (auditoría UX C17–C29), `d306f36` + `4c9cc55` (Fase A revisión, C30–C38), `21d0ac3` (script E2E versionado, C39), `abac6b6` (lint en CI, C40, rama `ci-frontend-lint`), `ab3c97e` (capturas del entregable + README C1–C39).
+- PRs: **#41 fusionado** (C17–C39 entraron a `master` vía `be33d60`) · **#43 fusionado** (lint en CI, `dd76185`) · #42 cerrado sin fusionar (subsumido por #41) · #31 · Rodo00#10
 - Archivos: `frontend/src/components/Upload.jsx`, `Report.jsx`, `frontend/src/index.css`, `frontend/src/mocks.js`, `frontend/src/App.jsx`, `frontend/vite.config.js`, `frontend/.env.example`, `README.md`, `docs/diseno/01_requisitos_interfaz.md`, `docs/diseno/03_wireframes.md`, `mockups/carga.html`, `mockups/reporte.html`.
 
 ---
@@ -235,8 +235,6 @@ El revisor probó el PR por su cuenta (CI 2/2 verde, lint/build/pytest locales, 
 
 ## Plan siguiente
 
-- PR [#42](https://github.com/retblast/vistobueno/pull/42) (`Rodo00:master` → `master`, head `6e461f1`, C17–C39 + workflows del fork) **activo**, mergeable y CI verde; subsume al PR [#41](https://github.com/retblast/vistobueno/pull/41) (5 commits, cerrable cuando #42 se fusione). Cerrar actividad 7 en `resultados_vistobueno/S7_pruebas_usabilidad/resumen.txt` tras la fusión.
-- PR [#43](https://github.com/retblast/vistobueno/pull/43) (lint en CI, rama `ci-frontend-lint`) **abierto, pendiente de aprobación del equipo**; cerrar cuando se fusione.
-- Integrar feedback de revisión de los PRs #42/#43 (si lo hay); fases B/C/D de la revisión (motor, backend, infra) pendientes de asignación.
-- ~~Capturas de pantalla pendientes~~ → hechas (2026-10-09): 14 tomas + índice en `capturas/README.md`.
-- Tag `v0.7.0` pendiente de creación (último ítem del checklist del entregable).
+- **2026-10-09 — el equipo fusionó los PRs de frontend**: [#41](https://github.com/retblast/vistobueno/pull/41) mergeado (`be33d60`, trajo C17–C39 a `master`) y [#43](https://github.com/retblast/vistobueno/pull/43) mergeado (`dd76185`, **lint de frontend ya corre en el CI**); [#42](https://github.com/retblast/vistobueno/pull/42) cerrado sin fusionar (subsumido por #41). Actividad 7 puede cerrarse en `resultados_vistobueno/S7_pruebas_usabilidad/resumen.txt`.
+- Nuevo PR con la documentación de cierre (capturas + sincronización README + esta bitácora) tras merge de `upstream/master` en la rama. Verificación post-merge: lint 0/0 · build 162.66 kB · pytest **375 passed, 2 skipped** (suite ampliada por el PR #46 del backend).
+- Tag `v0.7.0` pendiente de creación (último ítem del checklist del entregable); fases B/C/D de la revisión (motor, backend, infra) pendientes de asignación (el backend ya avanzó con #46).
