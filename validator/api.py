@@ -18,6 +18,7 @@ from pathlib import Path
 
 from email_validator import EmailNotValidError, validate_email
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from .api_models import (
     EstadoNotificacionAPI,
@@ -326,7 +327,10 @@ async def validar(
             tmp_path = tmp.name
 
         rules_data = _get_rules()
-        resultados_motor = validate_docx(tmp_path, rules_data)
+        # El motor es síncrono y CPU-intenso (recompila el DSL en cada
+        # request): se despacha al threadpool para no congelar el event
+        # loop mientras dura la validación.
+        resultados_motor = await run_in_threadpool(validate_docx, tmp_path, rules_data)
         reporte = build_report(resultados_motor)
 
         # Prompts de IA (solo si se solicitan)
@@ -365,8 +369,13 @@ async def validar(
                 if not config_smtp.enabled:
                     estado = EstadoNotificacionAPI.DESHABILITADO
                 else:
-                    resultado_envio = enviar_notificacion(
-                        respuesta, correo_normalizado, config=config_smtp
+                    # smtplib es bloqueante (timeout de hasta 10 s): fuera
+                    # del event loop, o un SMTP caído congela toda la API.
+                    resultado_envio = await run_in_threadpool(
+                        enviar_notificacion,
+                        respuesta,
+                        correo_normalizado,
+                        config=config_smtp,
                     )
                     if resultado_envio.enviado:
                         estado = EstadoNotificacionAPI.ENVIADO
