@@ -68,8 +68,7 @@ class TestTrabajoBloqueanteFueraDelEventLoop:
 
         assert respuesta.status_code == 200
         assert en_loop.get("motor") is False, (
-            "validate_docx corrió en el hilo del event loop: "
-            "bloquea toda la API mientras valida"
+            "validate_docx corrió en el hilo del event loop: bloquea toda la API mientras valida"
         )
 
     def test_el_envio_smtp_no_corre_en_el_event_loop(self, monkeypatch):
