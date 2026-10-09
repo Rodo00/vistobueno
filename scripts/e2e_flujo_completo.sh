@@ -35,7 +35,7 @@ echo "  ✅ Build OK (dist/ generado)"
 # 1. Tests backend (-o addopts="" evita el flag --cov de pyproject)
 echo "[1/9] Tests backend (pytest)..."
 cd "$ROOT" && "$BACKEND_VENV" -m pytest tests/ -q --tb=no -o addopts="" 2>&1 | tail -1
-echo "  ✅ Esperado: 223 passed, 21 skipped"
+echo "  ✅ Esperado: suite completa en verde, 0 skipped (conftest usa la plantilla oficial si está, si no el factory)"
 
 # 2. Levantar backend
 echo "[2/9] Levantando backend en :8000..."
