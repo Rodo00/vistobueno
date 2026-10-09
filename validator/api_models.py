@@ -144,13 +144,17 @@ class NotificacionAPI(BaseModel):
     Exposición para el personal del repositorio: con `estado` "enviado" la
     interfaz puede informar "enviamos las observaciones al correo del
     estudiante"; con "fallo", el `detalle` explica el motivo técnico para
-    reintentar o enviar manualmente.
+    reintentar o enviar manualmente; con "deshabilitado", el `detalle`
+    indica cómo habilitar el servidor (nota de configuración).
     """
 
     estado: EstadoNotificacionAPI = Field(..., description="Veredicto del envío")
     detalle: str | None = Field(
         default=None,
-        description="Motivo técnico cuando el envío falló; None en el resto de casos",
+        description=(
+            "Motivo técnico cuando el envío falló; nota de configuración "
+            "cuando el servidor está deshabilitado; None en el resto de casos"
+        ),
     )
 
 

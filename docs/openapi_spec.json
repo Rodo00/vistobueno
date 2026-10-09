@@ -3,7 +3,7 @@
   "info": {
     "title": "VistoBueno API",
     "description": "API de validación automática de formato de tesis — UNT FECyC",
-    "version": "1.4.0"
+    "version": "1.5.0"
   },
   "paths": {
     "/validar": {
@@ -204,7 +204,7 @@
               }
             ],
             "title": "Detalle",
-            "description": "Motivo técnico cuando el envío falló; None en el resto de casos"
+            "description": "Motivo técnico cuando el envío falló; nota de configuración cuando el servidor está deshabilitado; None en el resto de casos"
           }
         },
         "type": "object",
@@ -212,7 +212,7 @@
           "estado"
         ],
         "title": "NotificacionAPI",
-        "description": "Estado de la notificación por correo de observaciones.\n\nExposición para el personal del repositorio: con `estado` \"enviado\" la\ninterfaz puede informar \"enviamos las observaciones al correo del\nestudiante\"; con \"fallo\", el `detalle` explica el motivo técnico para\nreintentar o enviar manualmente."
+        "description": "Estado de la notificación por correo de observaciones.\n\nExposición para el personal del repositorio: con `estado` \"enviado\" la\ninterfaz puede informar \"enviamos las observaciones al correo del\nestudiante\"; con \"fallo\", el `detalle` explica el motivo técnico para\nreintentar o enviar manualmente; con \"deshabilitado\", el `detalle`\nindica cómo habilitar el servidor (nota de configuración)."
       },
       "PromptIA": {
         "properties": {

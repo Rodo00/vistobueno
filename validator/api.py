@@ -207,7 +207,7 @@ def _validar_correo(correo: str | None) -> str | None:
 app = FastAPI(
     title="VistoBueno API",
     description="API de validación automática de formato de tesis — UNT FECyC",
-    version="1.4.0",
+    version="1.5.0",
 )
 
 
@@ -411,6 +411,14 @@ async def validar(
                 config_smtp = ConfigSMTP.desde_entorno()
                 if not config_smtp.enabled:
                     estado = EstadoNotificacionAPI.DESHABILITADO
+                    # Nota de configuración para el personal del repositorio
+                    # (hallazgo B3): sin esto, "casilla marcada → 200 OK →
+                    # nada" era indistinguible de un envío silencioso. El
+                    # detalle indica cómo habilitar el servidor.
+                    detalle = (
+                        "El servidor no tiene la notificación habilitada: "
+                        "configure VISTOBUENO_NOTIFICACIONES=1 y VISTOBUENO_SMTP_HOST."
+                    )
                 else:
                     # smtplib es bloqueante (timeout de hasta 10 s): fuera
                     # del event loop, o un SMTP caído congela toda la API.

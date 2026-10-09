@@ -565,7 +565,10 @@ class TestNotificacionEndToEnd:
 
         assert respuesta.status_code == 200
         notificacion = respuesta.json()["notificacion"]
-        assert notificacion == {"estado": "deshabilitado", "detalle": None}
+        assert notificacion["estado"] == "deshabilitado"
+        # B3: nota de configuración para el personal del repositorio
+        assert notificacion["detalle"] is not None
+        assert "VISTOBUENO_NOTIFICACIONES" in notificacion["detalle"]
         assert buzon.recibidos == []
 
     def test_fallo_smtp_no_rompe_la_respuesta(self, monkeypatch):
