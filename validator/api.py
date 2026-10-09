@@ -18,6 +18,7 @@ from pathlib import Path
 
 from email_validator import EmailNotValidError, validate_email
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from .api_models import (
     EstadoNotificacionAPI,
@@ -29,6 +30,7 @@ from .api_models import (
     SeveridadAPI,
     ValidarResponse,
 )
+from .dsl_check import DSLValidationError
 from .engine import build_report, load_rules, validate_docx
 from .models import RuleResult
 from .notificacion import ConfigSMTP, enviar_notificacion
@@ -205,7 +207,7 @@ def _validar_correo(correo: str | None) -> str | None:
 app = FastAPI(
     title="VistoBueno API",
     description="API de validación automática de formato de tesis — UNT FECyC",
-    version="1.4.0",
+    version="1.5.0",
 )
 
 
@@ -326,7 +328,52 @@ async def validar(
             tmp_path = tmp.name
 
         rules_data = _get_rules()
-        resultados_motor = validate_docx(tmp_path, rules_data)
+
+        # El escaneo del DOCX es lo ÚNICO cuyos errores significan "el
+        # archivo del usuario está mal". El 422 se acota a esta llamada
+        # (hallazgo B6): pydantic.ValidationError es subclase de ValueError,
+        # así que un bug interno del mapeo a DTO o del motor respondía 422
+        # culpando al documento del estudiante. Ahora esos caen al 500
+        # genérico del bloque exterior.
+        # El motor es síncrono y CPU-intenso (recompila el DSL en cada
+        # request): se despacha al threadpool para no congelar el event
+        # loop mientras dura la validación.
+        try:
+            resultados_motor = await run_in_threadpool(validate_docx, tmp_path, rules_data)
+        except DSLValidationError as e:
+            # Reglas rotas = error de configuración del servidor, no del
+            # documento del estudiante.
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error interno del validador: configuración de reglas inválida: {e}",
+            ) from e
+        except zipfile.BadZipFile as e:
+            # Archivo no es un ZIP válido (truncado, corrupto, etc.)
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "No se pudo procesar el archivo DOCX: archivo corrupto o no es un DOCX válido."
+                ),
+            ) from e
+        except KeyError as e:
+            # El ZIP es válido pero falta word/document.xml (u otra parte
+            # esencial del formato DOCX). El extractor lanza KeyError al
+            # intentar leer el archivo interno del paquete OPC.
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"El archivo no contiene un documento Word válido: archivo interno faltante ({e})."
+                ),
+            ) from e
+        except ValueError as e:
+            # El extractor no encontró una parte esperada del DOCX
+            # (lanzado por ExtractedDocx.xpath cuando una parte no está
+            # disponible).
+            raise HTTPException(
+                status_code=422,
+                detail=(f"El archivo no contiene un documento Word válido: {e}."),
+            ) from e
+
         reporte = build_report(resultados_motor)
 
         # Prompts de IA (solo si se solicitan)
@@ -364,9 +411,22 @@ async def validar(
                 config_smtp = ConfigSMTP.desde_entorno()
                 if not config_smtp.enabled:
                     estado = EstadoNotificacionAPI.DESHABILITADO
+                    # Nota de configuración para el personal del repositorio
+                    # (hallazgo B3): sin esto, "casilla marcada → 200 OK →
+                    # nada" era indistinguible de un envío silencioso. El
+                    # detalle indica cómo habilitar el servidor.
+                    detalle = (
+                        "El servidor no tiene la notificación habilitada: "
+                        "configure VISTOBUENO_NOTIFICACIONES=1 y VISTOBUENO_SMTP_HOST."
+                    )
                 else:
-                    resultado_envio = enviar_notificacion(
-                        respuesta, correo_normalizado, config=config_smtp
+                    # smtplib es bloqueante (timeout de hasta 10 s): fuera
+                    # del event loop, o un SMTP caído congela toda la API.
+                    resultado_envio = await run_in_threadpool(
+                        enviar_notificacion,
+                        respuesta,
+                        correo_normalizado,
+                        config=config_smtp,
                     )
                     if resultado_envio.enviado:
                         estado = EstadoNotificacionAPI.ENVIADO
@@ -379,32 +439,6 @@ async def validar(
 
     except HTTPException:
         raise
-    except zipfile.BadZipFile as e:
-        # Archivo no es un ZIP válido (truncado, corrupto, etc.)
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "No se pudo procesar el archivo DOCX: archivo corrupto o no es un DOCX válido."
-            ),
-        ) from e
-    except KeyError as e:
-        # El ZIP es válido pero falta word/document.xml (u otra parte
-        # esencial del formato DOCX). El extractor lanza KeyError al
-        # intentar leer el archivo interno del paquete OPC.
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"El archivo no contiene un documento Word válido: archivo interno faltante ({e})."
-            ),
-        ) from e
-    except ValueError as e:
-        # El extractor no encontró una parte esperada del DOCX
-        # (lanzado por ExtractedDocx.xpath cuando una parte no está
-        # disponible).
-        raise HTTPException(
-            status_code=422,
-            detail=(f"El archivo no contiene un documento Word válido: {e}."),
-        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=500,

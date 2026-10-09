@@ -18,11 +18,13 @@ from conftest import (
     CAMPOS_RESUMEN,
     CLIENTE,
     MIME_DOCX,
-    PLANTILLA,
+    ruta_docx_prueba,
     subir_plantilla,
 )
 
+import validator.api
 from validator.api import REGLAS_YAML_PATH
+from validator.api_models import ResultadoReglaAPI
 from validator.engine import build_report, load_rules, validate_docx
 
 # ---------------------------------------------------------------------------
@@ -107,12 +109,11 @@ class TestRespuestaExitosa:
 
         # Semántica nueva: reglas_evaluadas = total_evaluadas (46 para doc bueno),
         # reglas_totales = total de reglas en YAML (48)
-        if PLANTILLA.exists():
-            rules_data = load_rules(REGLAS_YAML_PATH)
-            resultados_motor = validate_docx(str(PLANTILLA), rules_data)
-            reporte = build_report(resultados_motor)
-            assert metadatos["reglas_evaluadas"] == reporte["resumen"]["total_evaluadas"]
-            assert metadatos["reglas_totales"] == reporte["resumen"]["total"]
+        rules_data = load_rules(REGLAS_YAML_PATH)
+        resultados_motor = validate_docx(str(ruta_docx_prueba()), rules_data)
+        reporte = build_report(resultados_motor)
+        assert metadatos["reglas_evaluadas"] == reporte["resumen"]["total_evaluadas"]
+        assert metadatos["reglas_totales"] == reporte["resumen"]["total"]
 
     def test_aplicable_en_resultados(self):
         """Cada resultado debe tener 'aplicable'; las dos estructuras de otros
@@ -127,10 +128,8 @@ class TestRespuestaExitosa:
 
     def test_resumen_conteos_nuevos(self):
         """Los nuevos campos del resumen coinciden con el motor."""
-        if not PLANTILLA.exists():
-            pytest.skip("Plantilla de prueba no disponible")
         rules_data = load_rules(REGLAS_YAML_PATH)
-        resultados_motor = validate_docx(str(PLANTILLA), rules_data)
+        resultados_motor = validate_docx(str(ruta_docx_prueba()), rules_data)
         reporte = build_report(resultados_motor)
         resumen = self.datos["resumen"]
         assert resumen["total_evaluadas"] == reporte["resumen"]["total_evaluadas"]
@@ -347,6 +346,27 @@ class TestErrores:
         assert isinstance(r4.json()["detail"], str)
         assert len(r4.json()["detail"]) > 0
 
+    def test_error_interno_de_mapeo_responde_500(self, monkeypatch):
+        """B6: un bug interno del mapeo a DTO no debe vestirse de 422.
+
+        pydantic.ValidationError es subclase de ValueError. Cuando el
+        except ValueError cubría toda la respuesta, un fallo interno
+        del mapeo respondía 422 culpando al DOCX del estudiante.
+        """
+
+        def dto_roto(r):
+            # Construcción inválida a propósito: pydantic lanza ValidationError
+            return ResultadoReglaAPI(paso="no-es-bool", severidad="no-existe")
+
+        monkeypatch.setattr(validator.api, "_rule_result_a_dto", dto_roto)
+        contenido = build_large_docx(target_bytes=1024)
+        respuesta = CLIENTE.post(
+            "/validar",
+            files={"archivo": ("tesis.docx", contenido, MIME_DOCX)},
+        )
+        assert respuesta.status_code == 500
+        assert "Error interno del validador" in respuesta.json()["detail"]
+
 
 # ---------------------------------------------------------------------------
 # Tests: validación del campo correo (opcional)
@@ -417,12 +437,11 @@ class TestParidadAPICLI:
 
     def test_mismos_campos_que_motor(self):
         """Los campos del motor (RuleResult.to_dict) deben aparecer en la respuesta API."""
-        if not PLANTILLA.exists():
-            pytest.skip("Plantilla de prueba no disponible")
-
-        # El motor se compara contra el MISMO YAML que carga la API (F5: DSL).
+        # El motor se compara contra el MISMO YAML que carga la API (F5: DSL)
+        # y el MISMO DOCX de prueba (plantilla oficial o factory).
         rules_data = load_rules(REGLAS_YAML_PATH)
-        resultados_motor = validate_docx(str(PLANTILLA), rules_data)
+        docx = str(ruta_docx_prueba())
+        resultados_motor = validate_docx(docx, rules_data)
         reporte = build_report(resultados_motor)
 
         respuesta = subir_plantilla()

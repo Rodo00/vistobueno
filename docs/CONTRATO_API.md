@@ -1,6 +1,6 @@
 # Contrato de API — VistoBueno
 
-**Versión**: 1.4.0 (Semana 7 — Paso 7 del plan de tipo de documento)  
+**Versión**: 1.5.0 (Semana 7 — revisión integrada B3/B4)  
 **Fecha**: 2026-10-09  
 **Estado**: Implementado
 
@@ -123,7 +123,7 @@ El archivo se procesó correctamente y se evaluaron las reglas.
 |-------|------|-------------|
 | `semaforo` | `string` | `"verde"` si todas las reglas de severidad `error` pasan; `"rojo"` si alguna falla |
 | `notificacion.estado` | `string` | Veredicto del envío del correo de observaciones (ver sección siguiente) |
-| `notificacion.detalle` | `string?` | Motivo técnico cuando `estado` es `"fallo"`; `null` en el resto de casos |
+| `notificacion.detalle` | `string?` | Motivo técnico cuando `estado` es `"fallo"`; nota de configuración cuando es `"deshabilitado"`; `null` en el resto de casos |
 | `resumen.total` | `int` | Total de reglas presentes en el YAML de reglas |
 | `resumen.total_evaluadas` | `int` | Reglas realmente evaluadas sobre el documento |
 | `resumen.reglas_no_aplicables` | `int` | Reglas omitidas porque no aplican al tipo de documento detectado |
@@ -308,13 +308,13 @@ es el personal del repositorio.
 | `no_solicitado` | Había correo, pero no se pidió el envío | Ofrecer el checkbox de envío |
 | `sin_correo` | No se envió `correo` (aunque haya `notificar`) | Pedir el correo del estudiante |
 | `sin_observaciones` | Se pidió el envío, pero el semáforo no es `rojo` | Nada que notificar |
-| `deshabilitado` | Se pidió el envío, pero el servidor no tiene la notificación habilitada | Nota de configuración para administradores |
+| `deshabilitado` | Se pidió el envío, pero el servidor no tiene la notificación habilitada | Mostrar `detalle` como nota de configuración para administradores |
 
 ### Configuración del servidor (variables de entorno)
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
-| `VISTOBUENO_NOTIFICACIONES` | (vacío) | `1` habilita el envío |
+| `VISTOBUENO_NOTIFICACIONES` | (vacío) | `1`/`true`/`yes` habilitan el envío (mismo criterio que `VISTOBUENO_SMTP_STARTTLS`) |
 | `VISTOBUENO_SMTP_HOST` | (vacío) | Servidor SMTP institucional |
 | `VISTOBUENO_SMTP_PORT` | `587` | Puerto SMTP |
 | `VISTOBUENO_SMTP_USER` | (vacío) | Usuario SMTP (vacío = sin autenticación) |
@@ -400,6 +400,28 @@ El motor interno (`validator.engine`) devuelve `RuleResult` (dataclass) y `build
 ---
 
 ## Changelog
+
+### v1.5.0 (2026-10-09 — Semana 7, revisión integrada, hallazgos B3/B4)
+
+Endurecimiento del flujo de notificación tras la auditoría de la Semana 7.
+Cambio aditivo: ningún campo desaparece ni cambia de tipo.
+
+- **`notificacion.detalle` ahora también se llena con `estado` `"deshabilitado"`**
+  (hallazgo B3): nota de configuración que indica cómo habilitar el
+  servidor (`VISTOBUENO_NOTIFICACIONES=1` y `VISTOBUENO_SMTP_HOST`). Antes
+  el estado `deshabilitado` era el default real del servidor pero la
+  respuesta no traía ningún dato: "casilla marcada → 200 OK → nada" era
+  indistinguible de un envío silencioso.
+- **`VISTOBUENO_NOTIFICACIONES` acepta `1`/`true`/`yes`** (hallazgo B4),
+  igual que `VISTOBUENO_SMTP_STARTTLS`. Antes solo aceptaba el literal
+  `1`: poner `true` dejaba el envío apagado sin error visible.
+- **Best-effort total en el envío** (hallazgo B5, sin cambio de contrato):
+  la plantilla y las cabeceras del correo se arman dentro del manejo de
+  errores; ningún fallo del armado (p. ej. CR/LF en el nombre del archivo)
+  puede romper la respuesta HTTP. El nombre se sanitiza en el Subject
+  para impedir inyección de cabeceras.
+- `docs/openapi_spec.json` regenerado (el CI verifica el drift).
+- Versión del endpoint: `1.4.0` → `1.5.0`.
 
 ### v1.4.0 (2026-10-09 — Semana 7, paso 7 del plan de tipo de documento)
 
