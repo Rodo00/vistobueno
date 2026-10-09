@@ -30,6 +30,7 @@ from .api_models import (
     SeveridadAPI,
     ValidarResponse,
 )
+from .dsl_check import DSLValidationError
 from .engine import build_report, load_rules, validate_docx
 from .models import RuleResult
 from .notificacion import ConfigSMTP, enviar_notificacion
@@ -327,10 +328,52 @@ async def validar(
             tmp_path = tmp.name
 
         rules_data = _get_rules()
+
+        # El escaneo del DOCX es lo ÚNICO cuyos errores significan "el
+        # archivo del usuario está mal". El 422 se acota a esta llamada
+        # (hallazgo B6): pydantic.ValidationError es subclase de ValueError,
+        # así que un bug interno del mapeo a DTO o del motor respondía 422
+        # culpando al documento del estudiante. Ahora esos caen al 500
+        # genérico del bloque exterior.
         # El motor es síncrono y CPU-intenso (recompila el DSL en cada
         # request): se despacha al threadpool para no congelar el event
         # loop mientras dura la validación.
-        resultados_motor = await run_in_threadpool(validate_docx, tmp_path, rules_data)
+        try:
+            resultados_motor = await run_in_threadpool(validate_docx, tmp_path, rules_data)
+        except DSLValidationError as e:
+            # Reglas rotas = error de configuración del servidor, no del
+            # documento del estudiante.
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error interno del validador: configuración de reglas inválida: {e}",
+            ) from e
+        except zipfile.BadZipFile as e:
+            # Archivo no es un ZIP válido (truncado, corrupto, etc.)
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "No se pudo procesar el archivo DOCX: archivo corrupto o no es un DOCX válido."
+                ),
+            ) from e
+        except KeyError as e:
+            # El ZIP es válido pero falta word/document.xml (u otra parte
+            # esencial del formato DOCX). El extractor lanza KeyError al
+            # intentar leer el archivo interno del paquete OPC.
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"El archivo no contiene un documento Word válido: archivo interno faltante ({e})."
+                ),
+            ) from e
+        except ValueError as e:
+            # El extractor no encontró una parte esperada del DOCX
+            # (lanzado por ExtractedDocx.xpath cuando una parte no está
+            # disponible).
+            raise HTTPException(
+                status_code=422,
+                detail=(f"El archivo no contiene un documento Word válido: {e}."),
+            ) from e
+
         reporte = build_report(resultados_motor)
 
         # Prompts de IA (solo si se solicitan)
@@ -388,32 +431,6 @@ async def validar(
 
     except HTTPException:
         raise
-    except zipfile.BadZipFile as e:
-        # Archivo no es un ZIP válido (truncado, corrupto, etc.)
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "No se pudo procesar el archivo DOCX: archivo corrupto o no es un DOCX válido."
-            ),
-        ) from e
-    except KeyError as e:
-        # El ZIP es válido pero falta word/document.xml (u otra parte
-        # esencial del formato DOCX). El extractor lanza KeyError al
-        # intentar leer el archivo interno del paquete OPC.
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"El archivo no contiene un documento Word válido: archivo interno faltante ({e})."
-            ),
-        ) from e
-    except ValueError as e:
-        # El extractor no encontró una parte esperada del DOCX
-        # (lanzado por ExtractedDocx.xpath cuando una parte no está
-        # disponible).
-        raise HTTPException(
-            status_code=422,
-            detail=(f"El archivo no contiene un documento Word válido: {e}."),
-        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=500,

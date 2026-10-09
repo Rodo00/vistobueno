@@ -22,7 +22,9 @@ from conftest import (
     subir_plantilla,
 )
 
+import validator.api
 from validator.api import REGLAS_YAML_PATH
+from validator.api_models import ResultadoReglaAPI
 from validator.engine import build_report, load_rules, validate_docx
 
 # ---------------------------------------------------------------------------
@@ -346,6 +348,27 @@ class TestErrores:
         assert r4.status_code == 422
         assert isinstance(r4.json()["detail"], str)
         assert len(r4.json()["detail"]) > 0
+
+    def test_error_interno_de_mapeo_responde_500(self, monkeypatch):
+        """B6: un bug interno del mapeo a DTO no debe vestirse de 422.
+
+        pydantic.ValidationError es subclase de ValueError. Cuando el
+        except ValueError cubría toda la respuesta, un fallo interno
+        del mapeo respondía 422 culpando al DOCX del estudiante.
+        """
+
+        def dto_roto(r):
+            # Construcción inválida a propósito: pydantic lanza ValidationError
+            return ResultadoReglaAPI(paso="no-es-bool", severidad="no-existe")
+
+        monkeypatch.setattr(validator.api, "_rule_result_a_dto", dto_roto)
+        contenido = build_large_docx(target_bytes=1024)
+        respuesta = CLIENTE.post(
+            "/validar",
+            files={"archivo": ("tesis.docx", contenido, MIME_DOCX)},
+        )
+        assert respuesta.status_code == 500
+        assert "Error interno del validador" in respuesta.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
