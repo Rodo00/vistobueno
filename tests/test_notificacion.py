@@ -54,7 +54,13 @@ def dto_rojo() -> ValidarResponse:
     return ValidarResponse.model_validate(
         {
             "semaforo": "rojo",
-            "resumen": {"total": 47, "fallidos_error": 2, "fallidos_warning": 1},
+            "resumen": {
+                "total": 47,
+                "total_evaluadas": 46,
+                "reglas_no_aplicables": 1,
+                "fallidos_error": 2,
+                "fallidos_warning": 1,
+            },
             "resultados": [
                 {
                     "rule_id": "papel_tamano",
@@ -66,6 +72,7 @@ def dto_rojo() -> ValidarResponse:
                     "ubicacion": 'Sección "Formato general" (párr. 124-125)',
                     "fuente": "MANUAL.docx",
                     "cita": '"Tamaño A4/papel (210x297 cm)"',
+                    "aplicable": True,
                 },
                 {
                     "rule_id": "fuente_cuerpo",
@@ -77,6 +84,7 @@ def dto_rojo() -> ValidarResponse:
                     "ubicacion": None,
                     "fuente": "",
                     "cita": "",
+                    "aplicable": True,
                 },
                 {
                     "rule_id": "margen_superior",
@@ -88,14 +96,19 @@ def dto_rojo() -> ValidarResponse:
                     "ubicacion": None,
                     "fuente": "",
                     "cita": "",
+                    "aplicable": True,
                 },
             ],
             "como_preguntar_a_una_ia": [],
             "metadatos": {
                 "archivo_nombre": "tesis_prueba.docx",
                 "archivo_tamano_bytes": 1024,
-                "reglas_evaluadas": 47,
+                "reglas_evaluadas": 46,
+                "reglas_totales": 47,
                 "version_esquema": "2026-09-01",
+                "tipo_documento_declarado": None,
+                "tipo_documento_inferido": None,
+                "tipo_documento_estado": "vigente",
             },
         }
     )
@@ -106,14 +119,24 @@ def dto_verde() -> ValidarResponse:
     return ValidarResponse.model_validate(
         {
             "semaforo": "verde",
-            "resumen": {"total": 47, "fallidos_error": 0, "fallidos_warning": 0},
+            "resumen": {
+                "total": 47,
+                "total_evaluadas": 46,
+                "reglas_no_aplicables": 1,
+                "fallidos_error": 0,
+                "fallidos_warning": 0,
+            },
             "resultados": [],
             "como_preguntar_a_una_ia": [],
             "metadatos": {
                 "archivo_nombre": "tesis_ok.docx",
                 "archivo_tamano_bytes": 1024,
-                "reglas_evaluadas": 47,
+                "reglas_evaluadas": 46,
+                "reglas_totales": 47,
                 "version_esquema": "2026-09-01",
+                "tipo_documento_declarado": None,
+                "tipo_documento_inferido": None,
+                "tipo_documento_estado": "vigente",
             },
         }
     )

@@ -10,6 +10,7 @@ Uso:
     uvicorn validator.api:app --reload
 """
 
+import re
 import tempfile
 import zipfile
 from functools import cache
@@ -77,7 +78,58 @@ def _rule_result_a_dto(r: RuleResult) -> ResultadoReglaAPI:
         ubicacion=r.location,
         fuente=r.fuente,
         cita=r.cita,
+        aplicable=r.aplicable,
     )
+
+
+def _extraer_metadata_tipo_documento(
+    resultados_motor: list[RuleResult],
+) -> dict:
+    """Extrae los campos opcionales de tipo de documento de la detección.
+
+    La regla `deteccion_tipo_documento` siempre se ejecuta; su `encontrado`
+    contiene la decisión como texto. Se parsea para publicar:
+
+    - `tipo_documento_declarado`: lo que dice el Anexo 10 (None si no declaró).
+    - `tipo_documento_inferido`: lo que se dedujo de las firmas (None si no se
+      pudo inferir).
+    - `tipo_documento_estado`: "vigente" si se determinó un tipo,
+      "sin_determinar" si no se pudo, "contradictorio" si el Anexo 10 y las
+      firmas no coinciden.
+
+    El parseo es determinista sobre el texto que genera el motor mismo, por
+    lo que no hay riesgo de desalineación.
+    """
+    detector = next((r for r in resultados_motor if r.rule_id == "deteccion_tipo_documento"), None)
+    if detector is None or not detector.found:
+        return {
+            "tipo_documento_declarado": None,
+            "tipo_documento_inferido": None,
+            "tipo_documento_estado": "sin_determinar",
+        }
+
+    encontrado = detector.found
+    declarado = re.search(r"declarado=([a-z_]+)", encontrado)
+    inferido = re.search(r"inferido=([a-z_]+)", encontrado)
+    contradice = "contradictorio:" in encontrado
+    sin_determinar = encontrado.startswith("sin_determinado")
+
+    if contradice:
+        estado = "contradictorio"
+    elif sin_determinar:
+        estado = "sin_determinar"
+    else:
+        estado = "vigente"
+
+    # declarado e inferido son Optional[Match[str]]; en contradice ambos existen
+    declarado_val = declarado.group(1) if declarado else None
+    inferido_val = inferido.group(1) if inferido else None
+
+    return {
+        "tipo_documento_declarado": declarado_val,
+        "tipo_documento_inferido": inferido_val,
+        "tipo_documento_estado": estado,
+    }
 
 
 def _construir_respuesta(
@@ -90,13 +142,16 @@ def _construir_respuesta(
 ) -> ValidarResponse:
     """Ensambla la respuesta completa de la API a partir de la salida del motor."""
     resultados_dto = [_rule_result_a_dto(r) for r in resultados_motor]
+    resumen_motor = reporte["resumen"]
 
     return ValidarResponse(
         semaforo=reporte["semaforo"],
         resumen=ResumenValidacion(
-            total=reporte["resumen"]["total"],
-            fallidos_error=reporte["resumen"]["fallidos_error"],
-            fallidos_warning=reporte["resumen"]["fallidos_warning"],
+            total=resumen_motor["total"],
+            total_evaluadas=resumen_motor["total_evaluadas"],
+            reglas_no_aplicables=resumen_motor["reglas_no_aplicables"],
+            fallidos_error=resumen_motor["fallidos_error"],
+            fallidos_warning=resumen_motor["fallidos_warning"],
         ),
         resultados=resultados_dto,
         como_preguntar_a_una_ia=[
@@ -105,8 +160,10 @@ def _construir_respuesta(
         metadatos=MetadatosValidacion(
             archivo_nombre=archivo_nombre,
             archivo_tamano_bytes=archivo_tamano,
-            reglas_evaluadas=reporte["resumen"]["total"],
+            reglas_evaluadas=resumen_motor["total_evaluadas"],
+            reglas_totales=resumen_motor["total"],
             version_esquema=rules_data.get("version", "desconocido"),
+            **_extraer_metadata_tipo_documento(resultados_motor),
         ),
     )
 
@@ -148,7 +205,7 @@ def _validar_correo(correo: str | None) -> str | None:
 app = FastAPI(
     title="VistoBueno API",
     description="API de validación automática de formato de tesis — UNT FECyC",
-    version="1.3.0",
+    version="1.4.0",
 )
 
 

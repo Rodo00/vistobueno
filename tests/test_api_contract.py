@@ -104,7 +104,50 @@ class TestRespuestaExitosa:
         assert set(metadatos.keys()) == CAMPOS_METADATOS
         assert metadatos["archivo_nombre"] == "tesis.docx"
         assert metadatos["archivo_tamano_bytes"] > 0
-        assert metadatos["reglas_evaluadas"] == len(self.datos["resultados"])
+
+        # Semántica nueva: reglas_evaluadas = total_evaluadas (46 para doc bueno),
+        # reglas_totales = total de reglas en YAML (48)
+        if PLANTILLA.exists():
+            rules_data = load_rules(REGLAS_YAML_PATH)
+            resultados_motor = validate_docx(str(PLANTILLA), rules_data)
+            reporte = build_report(resultados_motor)
+            assert metadatos["reglas_evaluadas"] == reporte["resumen"]["total_evaluadas"]
+            assert metadatos["reglas_totales"] == reporte["resumen"]["total"]
+
+    def test_aplicable_en_resultados(self):
+        """Cada resultado debe tener 'aplicable'; las dos estructuras de otros
+        tipos deben venir con aplicable=False para el documento bueno."""
+        aplicables = {r["rule_id"]: r["aplicable"] for r in self.datos["resultados"]}
+        # Regla genérica siempre aplicable
+        assert aplicables.get("papel_tamano") is True
+        # Las 3 estructuras TINV: solo la cuantitativa aplica al doc bueno
+        assert aplicables.get("estructura_tinv_cuantitativo") is True
+        assert aplicables.get("estructura_tinv_cualitativo") is False
+        assert aplicables.get("estructura_tinv_revision_literatura") is False
+
+    def test_resumen_conteos_nuevos(self):
+        """Los nuevos campos del resumen coinciden con el motor."""
+        if not PLANTILLA.exists():
+            pytest.skip("Plantilla de prueba no disponible")
+        rules_data = load_rules(REGLAS_YAML_PATH)
+        resultados_motor = validate_docx(str(PLANTILLA), rules_data)
+        reporte = build_report(resultados_motor)
+        resumen = self.datos["resumen"]
+        assert resumen["total_evaluadas"] == reporte["resumen"]["total_evaluadas"]
+        assert resumen["reglas_no_aplicables"] == reporte["resumen"]["reglas_no_aplicables"]
+
+    def test_tipo_documento_metadata(self):
+        """Metadatos opcionales de tipo de documento están presentes."""
+        metadatos = self.datos["metadatos"]
+        for campo in (
+            "tipo_documento_declarado",
+            "tipo_documento_inferido",
+            "tipo_documento_estado",
+        ):
+            assert campo in metadatos, f"Falta {campo} en metadatos"
+        # Para el doc bueno (plantilla cuantitativa), se infiere el tipo
+        assert metadatos["tipo_documento_estado"] == "vigente"
+        assert metadatos["tipo_documento_inferido"] is not None
 
     def test_coherencia_semaforo_resumen(self):
         """Si hay fallidos_error > 0, semáforo debe ser 'rojo'."""
@@ -385,8 +428,13 @@ class TestParidadAPICLI:
         respuesta = subir_plantilla()
         datos_api = respuesta.json()
 
-        # Mismos counts
+        # Mismos counts (los dos nuevos campos)
         assert datos_api["resumen"]["total"] == reporte["resumen"]["total"]
+        assert datos_api["resumen"]["total_evaluadas"] == reporte["resumen"]["total_evaluadas"]
+        assert (
+            datos_api["resumen"]["reglas_no_aplicables"]
+            == reporte["resumen"]["reglas_no_aplicables"]
+        )
         assert datos_api["resumen"]["fallidos_error"] == reporte["resumen"]["fallidos_error"]
         assert datos_api["resumen"]["fallidos_warning"] == reporte["resumen"]["fallidos_warning"]
 
@@ -402,3 +450,17 @@ class TestParidadAPICLI:
         # no truncarse silenciosamente)
         for r_motor, r_api in zip(resultados_motor, datos_api["resultados"], strict=True):
             assert r_motor.passed == r_api["paso"], f"Discrepancia en {r_motor.rule_id}"
+
+        # Los nuevos campos de resultado
+        for r_motor, r_api in zip(resultados_motor, datos_api["resultados"], strict=True):
+            assert r_motor.aplicable == r_api["aplicable"], (
+                f"Discrepancia de aplicable en {r_motor.rule_id}"
+            )
+
+        # Metadatos de tipo de documento (opcionales)
+        metadatos_api = datos_api["metadatos"]
+        assert metadatos_api["tipo_documento_declarado"] is None  # plantilla no declara
+        assert (
+            metadatos_api["tipo_documento_inferido"] == "tinv_cuantitativo"
+        )  # infiere cuantitativo
+        assert metadatos_api["tipo_documento_estado"] == "vigente"
