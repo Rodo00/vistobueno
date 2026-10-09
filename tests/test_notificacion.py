@@ -23,7 +23,7 @@ import socket
 import pytest
 from aiosmtpd.controller import Controller
 from conftest import CLIENTE, MIME_DOCX
-from docx_factory import compilar_docx, configuracion_base
+from docx_factory import aplicar_mutacion, compilar_docx, configuracion_base
 
 from validator.api_models import ValidarResponse
 from validator.notificacion import (
@@ -54,7 +54,13 @@ def dto_rojo() -> ValidarResponse:
     return ValidarResponse.model_validate(
         {
             "semaforo": "rojo",
-            "resumen": {"total": 47, "fallidos_error": 2, "fallidos_warning": 1},
+            "resumen": {
+                "total": 47,
+                "total_evaluadas": 46,
+                "reglas_no_aplicables": 1,
+                "fallidos_error": 2,
+                "fallidos_warning": 1,
+            },
             "resultados": [
                 {
                     "rule_id": "papel_tamano",
@@ -66,6 +72,7 @@ def dto_rojo() -> ValidarResponse:
                     "ubicacion": 'Sección "Formato general" (párr. 124-125)',
                     "fuente": "MANUAL.docx",
                     "cita": '"Tamaño A4/papel (210x297 cm)"',
+                    "aplicable": True,
                 },
                 {
                     "rule_id": "fuente_cuerpo",
@@ -77,6 +84,7 @@ def dto_rojo() -> ValidarResponse:
                     "ubicacion": None,
                     "fuente": "",
                     "cita": "",
+                    "aplicable": True,
                 },
                 {
                     "rule_id": "margen_superior",
@@ -88,14 +96,19 @@ def dto_rojo() -> ValidarResponse:
                     "ubicacion": None,
                     "fuente": "",
                     "cita": "",
+                    "aplicable": True,
                 },
             ],
             "como_preguntar_a_una_ia": [],
             "metadatos": {
                 "archivo_nombre": "tesis_prueba.docx",
                 "archivo_tamano_bytes": 1024,
-                "reglas_evaluadas": 47,
+                "reglas_evaluadas": 46,
+                "reglas_totales": 47,
                 "version_esquema": "2026-09-01",
+                "tipo_documento_declarado": None,
+                "tipo_documento_inferido": None,
+                "tipo_documento_estado": "vigente",
             },
         }
     )
@@ -106,14 +119,24 @@ def dto_verde() -> ValidarResponse:
     return ValidarResponse.model_validate(
         {
             "semaforo": "verde",
-            "resumen": {"total": 47, "fallidos_error": 0, "fallidos_warning": 0},
+            "resumen": {
+                "total": 47,
+                "total_evaluadas": 46,
+                "reglas_no_aplicables": 1,
+                "fallidos_error": 0,
+                "fallidos_warning": 0,
+            },
             "resultados": [],
             "como_preguntar_a_una_ia": [],
             "metadatos": {
                 "archivo_nombre": "tesis_ok.docx",
                 "archivo_tamano_bytes": 1024,
-                "reglas_evaluadas": 47,
+                "reglas_evaluadas": 46,
+                "reglas_totales": 47,
                 "version_esquema": "2026-09-01",
+                "tipo_documento_declarado": None,
+                "tipo_documento_inferido": None,
+                "tipo_documento_estado": "vigente",
             },
         }
     )
@@ -195,6 +218,20 @@ class TestConfigSMTP:
         cfg = ConfigSMTP.desde_entorno()
         assert cfg.starttls is False
         assert cfg.enabled is True
+
+    def test_flag_acepta_true_yes_igual_que_starttls(self, monkeypatch):
+        """B4: el flag acepta 1/true/yes (antes solo el literal "1").
+
+        Sin esto, VISTOBUENO_NOTIFICACIONES=true dejaba el envío apagado
+        sin ningún error visible, siendo STARTTLS más permisivo.
+        """
+        monkeypatch.setenv("VISTOBUENO_SMTP_HOST", "smtp.unitru.edu.pe")
+        for valor in ("1", "true", "yes", "TRUE", " Yes "):
+            monkeypatch.setenv("VISTOBUENO_NOTIFICACIONES", valor)
+            assert ConfigSMTP.desde_entorno().notificaciones is True, valor
+        for valor in ("", "0", "no", "off", "cualquier-cosa"):
+            monkeypatch.setenv("VISTOBUENO_NOTIFICACIONES", valor)
+            assert ConfigSMTP.desde_entorno().notificaciones is False, valor
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +369,42 @@ class TestEnviarNotificacion:
         assert resultado.enviado is False
         assert "SMTPAuthenticationError" in resultado.detalle
 
+    def test_nombre_con_saltos_de_linea_no_inyecta_cabeceras(self, smtp_falso):
+        """B5: CR/LF en el nombre del archivo (viene del multipart) no puede
+        inyectar cabeceras ni romper el envío: se neutraliza en el Subject."""
+        dto = dto_rojo()
+        dto.metadatos.archivo_nombre = "tesis\r\nBcc: victima@spam.example"
+        cfg = ConfigSMTP(host="127.0.0.1", starttls=False, notificaciones=True)
+
+        resultado = enviar_notificacion(dto, "destino@prueba.local", cfg)
+
+        # El envío no se rompió (antes: ValueError escapaba del best-effort)
+        assert resultado.enviado is True
+        (smtp,) = smtp_falso.instancias
+        msg = smtp.mensaje_enviado
+        # El texto hostil quedó DENTRO del Subject, sin salto de línea...
+        asunto = str(msg["Subject"])
+        assert "Bcc:" in asunto
+        assert "\r" not in asunto and "\n" not in asunto
+        # ...y jamás llegó a ser una cabecera propia del mensaje
+        assert msg["Bcc"] is None
+
+    def test_error_del_armado_del_mensaje_es_best_effort(self, monkeypatch):
+        """B5: cualquier fallo del armado (no solo SMTP) no debe lanzar.
+
+        La plantilla y las cabeceras se arman dentro del try: un ValueError
+        ahí escapaba y rompía la respuesta HTTP de POST /validar.
+        """
+
+        def plantilla_rota(respuesta):
+            raise ValueError("plantilla rota")
+
+        monkeypatch.setattr("validator.notificacion.plantilla_correo", plantilla_rota)
+        cfg = ConfigSMTP(host="127.0.0.1", notificaciones=True)
+        resultado = enviar_notificacion(dto_rojo(), "destino@prueba.local", cfg)
+        assert resultado.enviado is False
+        assert "ValueError" in resultado.detalle
+
 
 # ---------------------------------------------------------------------------
 # Guardia de contrato: la respuesta de /validar expone la notificación
@@ -412,9 +485,23 @@ def sink_smtp():
         controlador.stop()
 
 
+# Regla que se desvía para obtener el semáforo rojo. Se elige una regla
+# mecánica y no una de estructura porque las estructuras están condicionadas
+# al tipo documental: el documento base es un plan cuantitativo, así que las
+# estructuras de los otros dos tipos de TINV ya no le aplican y no pueden
+# usarse para ponerlo en rojo. Antes de `aplicar_si` sí lo hacían, y por eso
+# este fixture quedó obsoleto al condicionarlas.
+REGLA_ROJA = "margen_superior"
+
+
 def _docx_rojo() -> bytes:
-    """Bytes del documento base (semáforo rojo: falla 2 reglas de estructura)."""
-    with open(compilar_docx(configuracion_base()), "rb") as f:
+    """Bytes de un documento con semáforo rojo.
+
+    Se parte del documento bueno y se le aplica una sola desviación
+    (márgen superior), de modo que el rojo lo produzca un incumplimiento real
+    y no una estructura que no le corresponde.
+    """
+    with open(compilar_docx(aplicar_mutacion(REGLA_ROJA, configuracion_base())), "rb") as f:
         return f.read()
 
 
@@ -466,8 +553,7 @@ class TestNotificacionEndToEnd:
         assert "Estimado(a) estudiante" in cuerpo_texto
         # El HTML incluye el rule_id de cada regla fallida como referencia estable
         cuerpo_html = mensaje.get_body(preferencelist=("html",)).get_content()
-        assert "estructura_tinv_cualitativo" in cuerpo_html
-        assert "estructura_tinv_revision_literatura" in cuerpo_html
+        assert REGLA_ROJA in cuerpo_html
 
     def test_deshabilitado_no_envia_nada(self, monkeypatch, sink_smtp):
         """Opt-in + rojo + correo, pero notificaciones apagadas: 'deshabilitado'."""
@@ -479,7 +565,10 @@ class TestNotificacionEndToEnd:
 
         assert respuesta.status_code == 200
         notificacion = respuesta.json()["notificacion"]
-        assert notificacion == {"estado": "deshabilitado", "detalle": None}
+        assert notificacion["estado"] == "deshabilitado"
+        # B3: nota de configuración para el personal del repositorio
+        assert notificacion["detalle"] is not None
+        assert "VISTOBUENO_NOTIFICACIONES" in notificacion["detalle"]
         assert buzon.recibidos == []
 
     def test_fallo_smtp_no_rompe_la_respuesta(self, monkeypatch):
