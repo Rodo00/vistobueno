@@ -189,6 +189,26 @@ El revisor probó el PR por su cuenta (CI 2/2 verde, lint/build/pytest locales, 
 
 ---
 
+### Séptima tanda — Capturas de pantalla del entregable (2026-10-09)
+
+`resultados_vistobueno/S7_pruebas_usabilidad/capturas/` estaba vacío desde la creación de la carpeta (el checklist del entregable las exigía). Se generaron **14 capturas** con **Chromium headless + Playwright** contra `frontend :5173` + `backend :8000` (sin tocar el código del proyecto):
+
+| # | Captura | Estado reproducido |
+|---|---------|-------------------|
+| 01–03 | carga claro/oscuro/móvil 375 | dropzone, correo, tema vía `localStorage vb-tema` |
+| 04–05 | reporte rojo claro/oscuro | DOCX de 1024 páginas: KPIs 47/28/12, barra, categorías, prompts IA |
+| 06–07 | buscador / vista agrupada | filtro `OBL` (lista + prompts); desplegable abierto |
+| 08 | error de formato | `.txt` rechazado en el cliente (banner `aviso.error`) |
+| 09 | modo demo | backend caído (`pkill uvicorn`) → banner "Reporte de ejemplo" |
+| 10a–b | notificación | casilla opt-in habilitada; badge azul `no_solicitado` |
+| 11–13 | foco / móvil / spinner | dropzone con Tab (`focus-visible`); reporte 375 px; spinner durante POST |
+
+Índice con detalle y mapeo C1–C40 en `resultados_vistobueno/S7_pruebas_usabilidad/capturas/README.md`. El checklist de `entregable_final.md` quedó tildeado (solo falta el tag `v0.7.0`). Detalle del entorno: el headless no trae libasound; se extrajo del `.deb` de Ubuntu sin root para poder lanzar Chromium.
+
+**Nota de honestidad**: el botón de tema muestra un glifo sustituto en algunas tomas (fuentes emoji del navegador headless, no un bug de la app); el 415 del servidor sigue documentado en `evidencias/error_415.json` vía curl — la captura 08 muestra el rechazo equivalente en el cliente.
+
+---
+
 ## Evidencias
 
 - Commits: `e27e683` (mejoras IHC), `7bd0be4` (Arreglos.txt v1), `5c169ef` (v2), `6c512ec` (v3), `df05bd6` (auditoría UX C17–C29), `d306f36` + `4c9cc55` (Fase A revisión, C30–C38), `21d0ac3` (script E2E versionado, C39), `abac6b6` (lint en CI, C40, rama `ci-frontend-lint`).
@@ -215,7 +235,8 @@ El revisor probó el PR por su cuenta (CI 2/2 verde, lint/build/pytest locales, 
 
 ## Plan siguiente
 
-- PR [#42](https://github.com/retblast/vistobueno/pull/42) (`Rodo00:master` → `master`, head `842ba75`, C17–C38 + workflows del fork) **activo**, mergeable y CI verde; subsume al PR [#41](https://github.com/retblast/vistobueno/pull/41) (5 commits, cerrable cuando #42 se fusione). Cerrar actividad 7 en `resultados_vistobueno/S7_pruebas_usabilidad/resumen.txt` tras la fusión.
+- PR [#42](https://github.com/retblast/vistobueno/pull/42) (`Rodo00:master` → `master`, head `6e461f1`, C17–C39 + workflows del fork) **activo**, mergeable y CI verde; subsume al PR [#41](https://github.com/retblast/vistobueno/pull/41) (5 commits, cerrable cuando #42 se fusione). Cerrar actividad 7 en `resultados_vistobueno/S7_pruebas_usabilidad/resumen.txt` tras la fusión.
 - PR [#43](https://github.com/retblast/vistobueno/pull/43) (lint en CI, rama `ci-frontend-lint`) **abierto, pendiente de aprobación del equipo**; cerrar cuando se fusione.
 - Integrar feedback de revisión de los PRs #42/#43 (si lo hay); fases B/C/D de la revisión (motor, backend, infra) pendientes de asignación.
-- Capturas de pantalla pendientes (`resultados_vistobueno/S7_pruebas_usabilidad/capturas/`).
+- ~~Capturas de pantalla pendientes~~ → hechas (2026-10-09): 14 tomas + índice en `capturas/README.md`.
+- Tag `v0.7.0` pendiente de creación (último ítem del checklist del entregable).
