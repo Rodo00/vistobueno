@@ -127,7 +127,8 @@ flowchart LR
 | `location` | `ubicacion` | Renombrado |
 | `fuente` | `fuente` | Sin cambio |
 | `cita` | `cita` | Sin cambio |
-| — | `metadatos` | Solo en API (nombre, tamaño, reglas, versión) |
+| `aplicable` | `aplicable` | `false` = regla omitida por tipo de documento (Semana 7, paso 7) |
+| — | `metadatos` | Solo en API (nombre, tamaño, reglas evaluadas/totales, tipo de documento, versión) |
 
 ---
 
