@@ -203,15 +203,40 @@ El revisor probó el PR por su cuenta (CI 2/2 verde, lint/build/pytest locales, 
 | 10a–b | notificación | casilla opt-in habilitada; badge azul `no_solicitado` |
 | 11–13 | foco / móvil / spinner | dropzone con Tab (`focus-visible`); reporte 375 px; spinner durante POST |
 
-Índice con detalle y mapeo C1–C40 en `resultados_vistobueno/S7_pruebas_usabilidad/capturas/README.md`. El checklist de `entregable_final.md` quedó tildeado (solo falta el tag `v0.7.0`). Detalle del entorno: el headless no trae libasound; se extrajo del `.deb` de Ubuntu sin root para poder lanzar Chromium.
+Índice con detalle y mapeo C1–C40 en `resultados_vistobueno/S7_pruebas_usabilidad/capturas/README.md`. El checklist de `entregable_final.md` quedó tildeado. Detalle del entorno: el headless no trae libasound; se extrajo del `.deb` de Ubuntu sin root para poder lanzar Chromium. La 15.ª captura (`14_deshabilitado_nota.png`) llegó con la octava tanda (C41).
 
 **Nota de honestidad**: el botón de tema muestra un glifo sustituto en algunas tomas (fuentes emoji del navegador headless, no un bug de la app); el 415 del servidor sigue documentado en `evidencias/error_415.json` vía curl — la captura 08 muestra el rechazo equivalente en el cliente.
 
 ---
 
+### Octava tanda — Arreglos.txt v5 (C41): badge de `deshabilitado` con nota de configuración
+
+El backend (v1.4 del contrato) ahora llena `notificacion.detalle` también cuando `estado=deshabilitado` — una nota de configuración para administradores (`CONTRATO_API.md`: *"Mostrar detalle como nota de configuración para administradores"*); antes el campo venía `null` y la UI no tenía nada que mostrar. La parte visual queda de este lado (**C41**, `Report.jsx`):
+
+- `badgeNotificacion()` suma el caso `deshabilitado`: **solo** si el backend envía `detalle` muestra un badge informativo (clase `info`) con el marco *"Nota para administradores:"* y el detalle del backend en `.badge-notif-detalle` (mismo estilo que el detalle de `fallo`; texto final tras el comentario 3 de la revisión). Sin `detalle` (backend anterior o respuesta incompleta) no se muestra nada, como hasta ahora — el cambio es aditivo y backwards-compatible.
+- `sin_observaciones` sigue sin badge.
+- `docs/diseno/01_requisitos_interfaz.md`: RF-20 y la tabla del reporte actualizadas con el nuevo comportamiento.
+
+#### Verificación (2026-10-09)
+
+- Backend en `:8000` (post-merge de upstream): `POST /validar` con `correo` + `notificar=true` + semáforo rojo → `{"estado":"deshabilitado","detalle":"El servidor no tiene la notificación habilitada: configure VISTOBUENO_NOTIFICACIONES=1 y VISTOBUENO_SMTP_HOST."}`.
+- UI en `:5173` (Playwright): badge azul visible con texto + nota de configuración (evidencia en `resultados_vistobueno/S7_pruebas_usabilidad/capturas/14_deshabilitado_nota.png`, local).
+- `npm run lint` → 0 errores/0 warnings · `npm run build` → OK.
+
+#### Revisión del PR #48 — comentarios aplicados (2026-10-09)
+
+El revisor marcó el PR como "Verificado" y dejó 4 comentarios no bloqueantes; se aplicaron los 4:
+
+1. **README** no listaba `sin_observaciones` ni `deshabilitado` → commit `docs: sincronizar estados de notificacion en README` (`2def0f1`, aparte como pidió el revisor).
+2. **Cabecera de `badgeNotificacion()`** decía "v1.3.0" → aclarada como v1.3.0 + `deshabilitado` detalle v1.4 (`3315231`).
+3. **Texto del badge solapado con el detalle del backend** → el texto principal ahora es solo el marco *"Nota para administradores:"* y el `detalle` del backend aporta la frase completa con las variables de entorno (`85296b1`).
+4. **Sin test automatizado de `badgeNotificacion()`** → se exportó la función y se agregó **vitest** como primer runner de tests del frontend (`npm test`): `Report.badgeNotificacion.test.js` con **10 tests** — los 6 estados del contrato, backwards-compatibilidad (`deshabilitado`/`fallo` sin detalle, `sin_observaciones`), payload inválido y trim del detalle (`8b8ddce`). *Pendiente de equipo: agregar `npm test` al job `frontend` de `ci.yml` en un PR aparte (precedente C40).*
+
+---
+
 ## Evidencias
 
-- Commits: `e27e683` (mejoras IHC), `7bd0be4` (Arreglos.txt v1), `5c169ef` (v2), `6c512ec` (v3), `df05bd6` (auditoría UX C17–C29), `d306f36` + `4c9cc55` (Fase A revisión, C30–C38), `21d0ac3` (script E2E versionado, C39), `abac6b6` (lint en CI, C40, rama `ci-frontend-lint`), `ab3c97e` (capturas del entregable + README C1–C39).
+- Commits: `e27e683` (mejoras IHC), `7bd0be4` (Arreglos.txt v1), `5c169ef` (v2), `6c512ec` (v3), `df05bd6` (auditoría UX C17–C29), `d306f36` + `4c9cc55` (Fase A revisión, C30–C38), `21d0ac3` (script E2E versionado, C39), `abac6b6` (lint en CI, C40, rama `ci-frontend-lint`), `ab3c97e` (capturas del entregable + README C1–C39), `6c608df` + `2def0f1` + `3315231` + `85296b1` + `8b8ddce` + `0c823be` (C41 y su revisión, PR #48).
 - PRs: **#41 fusionado** (C17–C39 entraron a `master` vía `be33d60`) · **#43 fusionado** (lint en CI, `dd76185`) · #42 cerrado sin fusionar (subsumido por #41) · #31 · Rodo00#10
 - Archivos: `frontend/src/components/Upload.jsx`, `Report.jsx`, `frontend/src/index.css`, `frontend/src/mocks.js`, `frontend/src/App.jsx`, `frontend/vite.config.js`, `frontend/.env.example`, `README.md`, `docs/diseno/01_requisitos_interfaz.md`, `docs/diseno/03_wireframes.md`, `mockups/carga.html`, `mockups/reporte.html`.
 
@@ -235,6 +260,7 @@ El revisor probó el PR por su cuenta (CI 2/2 verde, lint/build/pytest locales, 
 
 ## Plan siguiente
 
-- **2026-10-09 — el equipo fusionó los PRs de frontend**: [#41](https://github.com/retblast/vistobueno/pull/41) mergeado (`be33d60`, trajo C17–C39 a `master`) y [#43](https://github.com/retblast/vistobueno/pull/43) mergeado (`dd76185`, **lint de frontend ya corre en el CI**); [#42](https://github.com/retblast/vistobueno/pull/42) cerrado sin fusionar (subsumido por #41). Actividad 7 puede cerrarse en `resultados_vistobueno/S7_pruebas_usabilidad/resumen.txt`.
-- Nuevo PR con la documentación de cierre (capturas + sincronización README + esta bitácora) tras merge de `upstream/master` en la rama. Verificación post-merge: lint 0/0 · build 162.66 kB · pytest **375 passed, 2 skipped** (suite ampliada por el PR #46 del backend).
-- Tag `v0.7.0` pendiente de creación (último ítem del checklist del entregable); fases B/C/D de la revisión (motor, backend, infra) pendientes de asignación (el backend ya avanzó con #46).
+- **2026-10-09 — el equipo fusionó los PRs de frontend**: [#41](https://github.com/retblast/vistobueno/pull/41) mergeado (`be33d60`, C17–C39 en `master`) y [#43](https://github.com/retblast/vistobueno/pull/43) mergeado (`dd76185`, **lint de frontend ya corre en el CI**); [#42](https://github.com/retblast/vistobueno/pull/42) cerrado sin fusionar (subsumido por #41). Actividad 7 cerrada en `resultados_vistobueno/S7_pruebas_usabilidad/resumen.txt`.
+- **C41** (Arreglos.txt v5, octava tanda) en el [PR #48](https://github.com/retblast/vistobueno/pull/48) — revisión "Verificado" con sus 4 comentarios aplicados (README, cabecera v1.4, texto del badge, **10 tests vitest**); mergeable y CI verde, pendiente de aprobación del equipo.
+- **Tag `v0.7.0`** creado y pushado al fork (2026-10-09) — último ítem del checklist del entregable.
+- Pendientes de equipo: paso `npm test` en `ci.yml` (PR aparte, precedente C40); fases B/C/D de la revisión (el backend avanzó con #46).
