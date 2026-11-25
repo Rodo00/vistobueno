@@ -193,3 +193,25 @@ Verificación: `npm test` (vitest), `npm run lint` (eslint), `npm run build`
 (Vite) en verde; además la pantalla se prueba contra la API real con
 `nix run .#serve` y `nix run .#test-ficha-deposito` (flujo completo sin
 navegador).
+
+---
+
+### Puntos de seguimiento (no bloquean el merge — PR #130)
+
+1. **Versión de Node soportada**: `frontend/package.json` declara
+   `"engines": { "node": ">=20 <23 }` y se agregó `frontend/.nvmrc` con `22`.
+   La suite de pruebas (vitest + jsdom 25) requiere Node 22 LTS; en Node 26
+   `window.localStorage` queda como `undefined` y rompen los tests de resguardo
+   F1/F5.
+
+2. **Base del 429 (seguimiento)**: el timeout de 2 minutos es aceptable para
+   equipos lentos. Para la ventana del botón deshabilitado, conviene basarla en
+   la latencia de la primera ejecución en lugar de un valor fijo, para que el
+   backoff se ajuste a la velocidad real del servidor. Dejado como PR pequeño
+   de seguimiento.
+
+3. **Contrato de papeleo (seguimiento)**: la sección «Configuración de papeleo»
+   documenta un contrato propuesto `GET/POST /papeleo-config` y
+   `POST /papeleo-config/plantilla` que Int1 aún tiene que implementar. El
+   frontend ya degrada bien («no soportado»), que es la decisión correcta. Se
+   deja anotado para que el trabajo de backend se siga en paralelo.

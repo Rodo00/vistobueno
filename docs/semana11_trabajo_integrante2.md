@@ -157,12 +157,15 @@ y `FichaDeposito`.
 
 ## Plan de la semana siguiente
 
-1. Push de la rama y apertura del PR contra `retblast/vistobueno` (REST API
-   con `curl`, dado que `gh` no está instalado).
-2. Revisión del PR con el equipo (contrato de papeleo pendiente de Int1;
-   botones IA se dejan para después, como se acordó con el usuario).
-3. Si se retoma el informe PPP: ejecutar el estimador de paginación para los
-   números de página del índice (pendiente desde antes de esta semana).
-4. Verificación visual opcional con Playwright contra la API real
-   (`nix run .#serve`) para capturas de la nueva sección de papeleo y el
-   aviso de 429.
+1. PR #130 abierto contra `retblast/vistobueno` (rama
+   `frontend/timeout-429-orcid-papeleo`). Revisado localmente: 112/112 tests,
+   lint 0, build OK.
+2. Cambios derivados de la revisión (`Arreglos.txt` revisión de PR #130):
+   - `frontend/package.json` declara `"engines": { "node": ">=20 <23 }` y se
+     agregó `frontend/.nvmrc` con `22` (jsdom 25 requiere Node 22 LTS; en Node
+     26 `window.localStorage` es `undefined` y rompen los tests de resguardo).
+   - Puntos de seguimiento no bloqueantes: base del 429 por latencia real
+     (PR pequeño de seguimiento) y contrato de papeleo pendiente de Int1
+     (el frontend ya degrada con «no soportado»).
+3. Botones IA y estimador de paginación del informe PPP: se dejan para
+   después (acordado con el usuario).
